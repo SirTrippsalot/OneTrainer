@@ -45,7 +45,7 @@ class TrainUI(ctk.CTk):
         super(TrainUI, self).__init__()
 
         self.title("OneTrainer")
-        self.geometry("1100x740")
+        self.geometry("1100x800")
 
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")

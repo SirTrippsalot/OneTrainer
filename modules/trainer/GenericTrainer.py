@@ -178,7 +178,7 @@ class GenericTrainer(BaseTrainer):
                     destination=sample_path,
                     image_format=self.args.sample_image_format,
                     text_encoder_layer_skip=self.args.text_encoder_layer_skip,
-                    force_last_timestep=self.args.rescale_noise_scheduler_to_zero_terminal_snr,
+                    force_last_timestep=False,
                     on_sample=on_sample,
                 )
             except:

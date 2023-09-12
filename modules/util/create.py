@@ -399,32 +399,41 @@ def create_lr_scheduler(
     match learning_rate_scheduler:
         case LearningRateScheduler.CONSTANT:
             lr_lambda = lr_lambda_constant()
-
-        case LearningRateScheduler.LINEAR:
-            lr_lambda = lr_lambda_linear(
-                scheduler_steps
-            )
-
-        case LearningRateScheduler.COSINE:
-            lr_lambda = lr_lambda_cosine(
-                scheduler_steps
-            )
-
-        case LearningRateScheduler.COSINE_WITH_RESTARTS:
-            lr_lambda = lr_lambda_cosine_with_restarts(
-                scheduler_steps, num_cycles
-            )
-
+        case LearningRateScheduler.COSINE_DOWN:
+            lr_lambda = lr_lambda_cosine_down(scheduler_steps, num_cycles)
+        case LearningRateScheduler.COSINE_UP:
+            lr_lambda = lr_lambda_cosine_up(scheduler_steps, num_cycles)
         case LearningRateScheduler.COSINE_WITH_HARD_RESTARTS:
-            lr_lambda = lr_lambda_cosine_with_hard_restarts(
-                scheduler_steps, num_cycles
-            )
+            lr_lambda = lr_lambda_cosine_with_hard_restarts(scheduler_steps, num_cycles)
         case LearningRateScheduler.REX:
-            lr_lambda = lr_lambda_rex(
-                scheduler_steps
-            )
+            lr_lambda = lr_rex(scheduler_steps, num_cycles)
+        case LearningRateScheduler.TRIANGLE:
+            lr_lambda = lr_triangle(scheduler_steps, num_cycles)
+        case LearningRateScheduler.RAMP:
+            lr_lambda = lr_ramp(scheduler_steps, num_cycles)
+        case LearningRateScheduler.SAWTOOTH:
+            lr_lambda = lr_sawtooth(scheduler_steps, num_cycles)
+        case LearningRateScheduler.SQUARE:
+            lr_lambda = lr_square(scheduler_steps, num_cycles)
+        case LearningRateScheduler.PULSE:
+            lr_lambda = lr_pulse(scheduler_steps, num_cycles)
+        case LearningRateScheduler.ROUNDED_PULSE:
+            lr_lambda = lr_rounded_pulse(scheduler_steps, num_cycles)
+        case LearningRateScheduler.TRIANGLE_PULSE:
+            lr_lambda = lr_triangle_pulse(scheduler_steps, num_cycles)
+        case LearningRateScheduler.RAMP_PULSE:
+            lr_lambda = lr_ramp_pulse(scheduler_steps, num_cycles)
+        case LearningRateScheduler.SAWTOOTH_PULSE:
+            lr_lambda = lr_sawtooth_pulse(scheduler_steps, num_cycles)
+        case LearningRateScheduler.SINE_CUBED:
+            lr_lambda = lr_sine_cubed(scheduler_steps, num_cycles)
+        case LearningRateScheduler.FLAME:
+            lr_lambda = lr_flame(scheduler_steps, num_cycles)
+        case LearningRateScheduler.SEMICIRCLE:
+            lr_lambda = lr_semicircle(scheduler_steps, num_cycles)
         case _:
             lr_lambda = lr_lambda_constant()
+
 
     if warmup_steps > 0:
         lr_lambda = lr_lambda_warmup(warmup_steps, lr_lambda)
