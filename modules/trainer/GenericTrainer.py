@@ -36,7 +36,6 @@ from modules.util.dtype_util import allow_mixed_precision
 from modules.util.enum.ImageFormat import ImageFormat
 from modules.util.enum.ModelFormat import ModelFormat
 from modules.util.enum.TimeUnit import TimeUnit
-from modules.util.enum.TrainingMethod import TrainingMethod
 from modules.util.params.SampleParams import SampleParams
 
 
@@ -152,40 +151,56 @@ class GenericTrainer(BaseTrainer):
             sample_params_list: list[SampleParams],
             folder_postfix: str = "",
             image_format: ImageFormat = ImageFormat.JPG,
+            is_custom_sample: bool = False,
     ):
         for i, sample_params in enumerate(sample_params_list):
-            try:
-                safe_prompt = path_util.safe_filename(sample_params.prompt)
+            if sample_params.enabled:
+                try:
+                    safe_prompt = path_util.safe_filename(sample_params.prompt)
 
-                sample_dir = os.path.join(
-                    self.args.workspace_dir,
-                    "samples",
-                    f"{str(i)} - {safe_prompt}{folder_postfix}",
-                )
+                    if is_custom_sample:
+                        sample_dir = os.path.join(
+                            self.args.workspace_dir,
+                            "samples",
+                            "custom",
+                        )
+                    else:
+                        sample_dir = os.path.join(
+                            self.args.workspace_dir,
+                            "samples",
+                            f"{str(i)} - {safe_prompt}{folder_postfix}",
+                        )
 
-                sample_path = os.path.join(
-                    sample_dir,
-                    f"{self.__get_string_timestamp()}-training-sample-{train_progress.filename_string()}{image_format.extension()}"
-                )
+                    sample_path = os.path.join(
+                        sample_dir,
+                        f"{self.__get_string_timestamp()}-training-sample-{train_progress.filename_string()}{image_format.extension()}"
+                    )
 
-                def on_sample(image: Image):
-                    self.tensorboard.add_image(f"sample{str(i)} - {safe_prompt}", pil_to_tensor(image),
-                                               train_progress.global_step)
-                    self.callbacks.on_sample(image)
+                    def on_sample_default(image: Image):
+                        self.tensorboard.add_image(f"sample{str(i)} - {safe_prompt}", pil_to_tensor(image),
+                                                   train_progress.global_step)
+                        self.callbacks.on_sample_default(image)
 
-                self.model_sampler.sample(
-                    sample_params=sample_params,
-                    destination=sample_path,
-                    image_format=self.args.sample_image_format,
-                    text_encoder_layer_skip=self.args.text_encoder_layer_skip,
-                    force_last_timestep=False,
-                    on_sample=on_sample,
-                )
-            except:
-                traceback.print_exc()
-                print("Error during sampling, proceeding without sampling")
+                    def on_sample_custom(image: Image):
+                        self.callbacks.on_sample_custom(image)
 
-            self.__gc()
+                    on_sample = on_sample_custom if is_custom_sample else on_sample_default
+                    on_update_progress = self.callbacks.on_update_sample_custom_progress if is_custom_sample else self.callbacks.on_update_sample_default_progress
+
+                    self.model_sampler.sample(
+                        sample_params=sample_params,
+                        destination=sample_path,
+                        image_format=self.args.sample_image_format,
+                        text_encoder_layer_skip=self.args.text_encoder_layer_skip,
+                        force_last_timestep=self.args.rescale_noise_scheduler_to_zero_terminal_snr,
+                        on_sample=on_sample,
+                        on_update_progress=on_update_progress,
+                    )
+                except:
+                    traceback.print_exc()
+                    print("Error during sampling, proceeding without sampling")
+
+                self.__gc()
 
     def __sample_during_training(
             self,
@@ -199,6 +214,7 @@ class GenericTrainer(BaseTrainer):
 
         self.model_setup.setup_eval_device(self.model)
 
+        is_custom_sample = False
         if not sample_params_list:
             with open(self.args.sample_definition_file_name, 'r') as f:
                 sample_params_json_list = json.load(f)
@@ -207,16 +223,30 @@ class GenericTrainer(BaseTrainer):
                     sample_params = SampleParams.default_values()
                     sample_params.from_json(sample_params_json)
                     sample_params_list.append(sample_params)
+        else:
+            is_custom_sample = True
 
         if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
             self.model.ema.copy_ema_to(self.parameters, store_temp=True)
 
-        self.__sample_loop(train_progress, train_device, sample_params_list)
+        self.__sample_loop(
+            train_progress=train_progress,
+            train_device=train_device,
+            sample_params_list=sample_params_list,
+            is_custom_sample=is_custom_sample
+        )
 
         if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
             self.model.ema.copy_temp_to(self.parameters)
-            # ema-less sampling, if an ema model exists
-            self.__sample_loop(train_progress, train_device, sample_params_list, " - no-ema")
+
+        # ema-less sampling, if an ema model exists
+        if self.model.ema and not is_custom_sample and 1 == 0: #MTODO replace with logic for divergence
+            self.__sample_loop(
+                train_progress=train_progress,
+                train_device=train_device,
+                sample_params_list=sample_params_list,
+                folder_postfix=" - no-ema",
+            )
 
         self.model_setup.setup_train_device(self.model, self.args)
 
@@ -343,8 +373,8 @@ class GenericTrainer(BaseTrainer):
             global_step=train_progress.global_step
         )
 
-        weight_dtype = self.args.lora_weight_dtype if self.args.training_method == TrainingMethod.LORA else self.args.weight_dtype
-        if self.args.train_dtype.enable_loss_scaling(weight_dtype):
+        weight_dtypes = self.args.trainable_weight_dtypes()
+        if self.args.train_dtype.enable_loss_scaling(weight_dtypes):
             scaler = GradScaler()
         else:
             scaler = None
@@ -370,14 +400,14 @@ class GenericTrainer(BaseTrainer):
                         lambda: self.__sample_during_training(train_progress, train_device)
                     )
 
-                if self.__needs_gc(train_progress):
-                    self.__gc()
-
                 sample_commands = self.commands.get_and_reset_sample_custom_commands()
                 if sample_commands:
                     self.__enqueue_sample_during_training(
                         lambda: self.__sample_during_training(train_progress, train_device, sample_commands)
                     )
+
+                if self.__needs_gc(train_progress):
+                    self.__gc()
 
                 if not has_gradient:
                     self.__execute_sample_during_training()
@@ -447,13 +477,13 @@ class GenericTrainer(BaseTrainer):
                     self.one_step_trained = True
 
                 train_progress.next_step(self.args.batch_size)
-                self.callbacks.on_update_progress(train_progress, current_epoch_length, self.args.epochs)
+                self.callbacks.on_update_train_progress(train_progress, current_epoch_length, self.args.epochs)
 
                 if self.commands.get_stop_command():
                     return
 
             train_progress.next_epoch()
-            self.callbacks.on_update_progress(train_progress, current_epoch_length, self.args.epochs)
+            self.callbacks.on_update_train_progress(train_progress, current_epoch_length, self.args.epochs)
 
             if self.commands.get_stop_command():
                 return

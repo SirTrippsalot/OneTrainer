@@ -7,12 +7,12 @@ from typing import Callable
 
 import customtkinter as ctk
 import torch
-from PIL.Image import Image
 
 from modules.trainer.GenericTrainer import GenericTrainer
 from modules.ui.CaptionUI import CaptionUI
 from modules.ui.ConceptTab import ConceptTab
 from modules.ui.ConvertModelUI import ConvertModelUI
+from modules.ui.SampleWindow import SampleWindow
 from modules.ui.SamplingTab import SamplingTab
 from modules.ui.TopBar import TopBar
 from modules.util.TrainProgress import TrainProgress
@@ -481,6 +481,8 @@ class TrainUI(ctk.CTk):
 
         components.button(top_frame, 0, 4, "sample now", self.sample_now)
 
+        components.button(top_frame, 0, 5, "manual sample", self.open_sample_ui)
+
         # table
         frame = ctk.CTkFrame(master=master, corner_radius=0)
         frame.grid(row=1, column=0, sticky="nsew")
@@ -536,7 +538,7 @@ class TrainUI(ctk.CTk):
 
         # lora weight dtype
         components.label(master, 3, 0, "LoRA Weight Data Type",
-                         tooltip="The base LoRA weight data type used for training. This can reduce memory consumption, but reduces precision")
+                         tooltip="The LoRA weight data type used for training. This can reduce memory consumption, but reduces precision")
         components.options_kv(master, 3, 1, [
             ("float32", DataType.FLOAT_32),
             ("bfloat16", DataType.BFLOAT_16),
@@ -568,6 +570,14 @@ class TrainUI(ctk.CTk):
         components.label(master, 2, 0, "Initial embedding text",
                          tooltip="The initial embedding text used when creating a new embedding")
         components.entry(master, 2, 1, self.ui_state, "initial_embedding_text")
+
+        # embedding weight dtype
+        components.label(master, 3, 0, "Embedding Weight Data Type",
+                         tooltip="The Embedding weight data type used for training. This can reduce memory consumption, but reduces precision")
+        components.options_kv(master, 3, 1, [
+            ("float32", DataType.FLOAT_32),
+            ("bfloat16", DataType.BFLOAT_16),
+        ], self.ui_state, "embedding_weight_dtype")
 
         return master
 
@@ -607,16 +617,13 @@ class TrainUI(ctk.CTk):
     def open_tensorboard(self):
         webbrowser.open("http://localhost:6006/", new=0, autoraise=False)
 
-    def on_update_progress(self, train_progress: TrainProgress, max_sample: int, max_epoch: int):
+    def on_update_train_progress(self, train_progress: TrainProgress, max_sample: int, max_epoch: int):
         self.set_step_progress(train_progress.epoch_step, max_sample)
         self.set_epoch_progress(train_progress.epoch, max_epoch)
         pass
 
     def on_update_status(self, status: str):
         self.status_label.configure(text=status)
-        pass
-
-    def on_sample(self, sample: Image):
         pass
 
     def open_dataset_tool(self):
@@ -627,16 +634,24 @@ class TrainUI(ctk.CTk):
         window = ConvertModelUI(self)
         self.wait_window(window)
 
+    def open_sample_ui(self):
+        training_callbacks = self.training_callbacks
+        training_commands = self.training_commands
+
+        if training_callbacks and training_commands:
+            window = SampleWindow(self, training_callbacks, training_commands)
+            self.wait_window(window)
+            training_callbacks.set_on_sample_custom()
+
     def __training_thread_function(self):
         error_caught = False
 
-        callbacks = TrainCallbacks(
-            on_update_progress=self.on_update_progress,
+        self.training_callbacks = TrainCallbacks(
+            on_update_train_progress=self.on_update_train_progress,
             on_update_status=self.on_update_status,
-            on_sample=self.on_sample,
         )
 
-        trainer = GenericTrainer(self.train_args, callbacks, self.training_commands)
+        trainer = GenericTrainer(self.train_args, self.training_callbacks, self.training_commands)
 
         try:
             trainer.start()
