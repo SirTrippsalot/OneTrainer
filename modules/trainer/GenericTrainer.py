@@ -208,16 +208,14 @@ class GenericTrainer(BaseTrainer):
                     sample_params.from_json(sample_params_json)
                     sample_params_list.append(sample_params)
 
-        if self.model.ema:
+        if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
             self.model.ema.copy_ema_to(self.parameters, store_temp=True)
 
         self.__sample_loop(train_progress, train_device, sample_params_list)
 
-        if self.model.ema:
+        if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
             self.model.ema.copy_temp_to(self.parameters)
-
-        # ema-less sampling, if an ema model exists
-        if self.model.ema:
+            # ema-less sampling, if an ema model exists
             self.__sample_loop(train_progress, train_device, sample_params_list, " - no-ema")
 
         self.model_setup.setup_train_device(self.model, self.args)
@@ -268,7 +266,7 @@ class GenericTrainer(BaseTrainer):
         print("Saving " + save_path)
 
         try:
-            if self.model.ema:
+            if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
                 self.model.ema.copy_ema_to(self.parameters, store_temp=True)
 
             self.model_saver.save(
@@ -289,7 +287,7 @@ class GenericTrainer(BaseTrainer):
                 print("Could not delete partial save")
                 pass
         finally:
-            if self.model.ema:
+            if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
                 self.model.ema.copy_temp_to(self.parameters)
 
         self.__gc()
@@ -441,6 +439,11 @@ class GenericTrainer(BaseTrainer):
                             self.parameters,
                             update_step
                         )
+                        # Apply EMA parameters back to the model
+                        if 1 == 1: #MTODO replace with logic for non-divergence
+                            self.model.ema.apply_ema_to_model(self.parameters)
+
+                        
                     self.one_step_trained = True
 
                 train_progress.next_step(self.args.batch_size)
@@ -462,7 +465,7 @@ class GenericTrainer(BaseTrainer):
 
             self.callbacks.on_update_status("saving the final model")
 
-            if self.model.ema:
+            if self.model.ema and 1 == 0: #MTODO replace with logic for divergence
                 self.model.ema.copy_ema_to(self.parameters, store_temp=False)
 
             self.model_saver.save(

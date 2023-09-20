@@ -29,7 +29,7 @@ def lr_lambda_cosine_down(scheduler_steps: int, num_cycles: float, min_lr=0.1):
     return lr_lambda
 
 # Cosine (Starting at min)
-def lr_lambda_cosine_up(scheduler_steps: int, num_cycles: float, min_lr=0.5):
+def lr_lambda_cosine_up(scheduler_steps: int, num_cycles: float, min_lr=0.0):
     def lr_lambda(current_step: int):
         progress = float(current_step) / float(scheduler_steps)
         schedule = math.cos(progress * 2.0 * math.pi * num_cycles)

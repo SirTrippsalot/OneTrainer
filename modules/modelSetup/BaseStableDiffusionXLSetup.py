@@ -111,7 +111,7 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
             text_encoder_1_output = model.text_encoder_1(
                 batch['tokens_1'], output_hidden_states=True, return_dict=True
             )
-            text_encoder_1_output = text_encoder_1_output.hidden_states[-2]
+            text_encoder_1_output = text_encoder_1_output.hidden_states[11]
 
             text_encoder_2_output = model.text_encoder_2(
                 batch['tokens_2'], output_hidden_states=True, return_dict=True
@@ -183,10 +183,10 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
 
             target_velocity = model.noise_scheduler.get_velocity(scaled_latent_image, latent_noise, timestep)
             model_output_data = {
-                # 'predicted': predicted_latent_noise,
-                # 'target': target_velocity,
-                'predicted': self.project_latent_to_image(scaled_predicted_latent_image).clamp(-1, 1),
-                'target': self.project_latent_to_image(scaled_latent_image).clamp(-1, 1)
+                 'predicted': predicted_latent_noise,
+                 'target': target_velocity,
+                # 'predicted': self.project_latent_to_image(scaled_predicted_latent_image).clamp(-1, 1),
+                # 'target': self.project_latent_to_image(scaled_latent_image).clamp(-1, 1)
             }
 
         if args.debug_mode:
@@ -256,14 +256,12 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
         # predicted = data['predicted-image']
         # target = data['target-image']
         
-        
-        ch3_predicted = predicted[:, :3, :, :]
-        ch3_target = target[:, :3, :, :]
-        
         #Defining Stregths to facilitate UI integration
         mse_strength = 0.5
         mae_strength = 0.5
-        cosine_strength = 0.0
+        cosine_strength = 0.2
+        mae_losses, mse_losses, cosine_sim_losses = 0, 0, 0
+
 
         # TODO: don't disable masked loss functions when has_conditioning_image_input is true.
         #  This breaks if only the VAE is trained, but was loaded from an inpainting checkpoint
@@ -279,26 +277,29 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
         else:
         
             #MSE/L2 Loss
-            mse_losses = F.mse_loss(
-                predicted,
-                target,
-                reduction='none'
-            ).mean([1, 2, 3])
+            if mse_strength != 0:
+                mse_losses = F.mse_loss(
+                    predicted,
+                    target,
+                    reduction='none'
+                ).mean([1, 2, 3])
             
             #MAE/L1 Loss
-            mae_losses = F.l1_loss(
-                predicted, 
-                target, 
-                reduction='none'
-            ).mean([1, 2, 3])
+            if mae_strength != 0:
+                mae_losses = F.l1_loss(
+                    predicted, 
+                    target, 
+                    reduction='none'
+                ).mean([1, 2, 3])
             
             #Cosine similarity loss
-            predicted_normalized = F.normalize(predicted, p=2, dim=1)
-            target_normalized = F.normalize(target, p=2, dim=1)
-            cosine_sim = torch.nn.functional.cosine_similarity(predicted_normalized, target_normalized, dim=1)
-            adjusted_cosine_sim = (1 + cosine_sim) / 2
-            cosine_sim_losses = 1 - adjusted_cosine_sim
-            cosine_sim_losses = cosine_sim_losses.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+            if cosine_strength != 0:
+                predicted_normalized = F.normalize(predicted, p=2, dim=1)
+                target_normalized = F.normalize(target, p=2, dim=1)
+                cosine_sim = torch.nn.functional.cosine_similarity(predicted_normalized, target_normalized, dim=1)
+                adjusted_cosine_sim = (1 + cosine_sim) / 2
+                cosine_sim_losses = 1 - adjusted_cosine_sim
+                cosine_sim_losses = cosine_sim_losses.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
             
             #Set Losses Strength (Should probably sum to 1)
             losses = (
