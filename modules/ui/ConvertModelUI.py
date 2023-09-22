@@ -51,6 +51,7 @@ class ConvertModelUI(ctk.CTkToplevel):
             ("Stable Diffusion 2.0 Inpainting", ModelType.STABLE_DIFFUSION_20_INPAINTING),
             ("Stable Diffusion 2.1", ModelType.STABLE_DIFFUSION_21),
             ("Stable Diffusion XL 1.0 Base", ModelType.STABLE_DIFFUSION_XL_10_BASE),
+            ("Stable Diffusion XLR 1.0", ModelType.STABLE_DIFFUSION_XLR_10),
         ], self.ui_state, "model_type")
 
         # training method

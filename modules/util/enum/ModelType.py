@@ -13,6 +13,7 @@ class ModelType(Enum):
 
     STABLE_DIFFUSION_XL_10_BASE = 'STABLE_DIFFUSION_XL_10_BASE'
     STABLE_DIFFUSION_XL_10_BASE_INPAINTING = 'STABLE_DIFFUSION_XL_10_BASE_INPAINTING'
+    STABLE_DIFFUSION_XLR_10 = 'STABLE_DIFFUSION_XLR_10'
 
     KANDINSKY_21 = 'KANDINSKY_21'
 
@@ -31,8 +32,11 @@ class ModelType(Enum):
 
     def is_stable_diffusion_xl(self):
         return self == ModelType.STABLE_DIFFUSION_XL_10_BASE \
-            or self == ModelType.STABLE_DIFFUSION_XL_10_BASE_INPAINTING
-
+            or self == ModelType.STABLE_DIFFUSION_XL_10_BASE_INPAINTING 
+            
+    def is_stable_diffusion_xlr(self):
+            return self == ModelType.STABLE_DIFFUSION_XLR_10
+            
     def is_kandinsky(self):
         return self == ModelType.KANDINSKY_21
 

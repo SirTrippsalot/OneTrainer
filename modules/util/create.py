@@ -12,6 +12,7 @@ from modules.dataLoader.MgdsStableDiffusionFineTuneDataLoader import MgdsStableD
 from modules.dataLoader.MgdsStableDiffusionFineTuneVaeDataLoader import MgdsStableDiffusionFineTuneVaeDataLoader
 from modules.dataLoader.MgdsStableDiffusionXLEmbeddingDataLoader import MgdsStableDiffusionXLEmbeddingDataLoader
 from modules.dataLoader.MgdsStableDiffusionXLFineTuneDataLoader import MgdsStableDiffusionXLFineTuneDataLoader
+from modules.dataLoader.MgdsStableDiffusionXLRFineTuneDataLoader import MgdsStableDiffusionXLRFineTuneDataLoader
 from modules.model.BaseModel import BaseModel
 from modules.modelLoader.BaseModelLoader import BaseModelLoader
 from modules.modelLoader.KandinskyLoRAModelLoader import KandinskyLoRAModelLoader
@@ -22,11 +23,13 @@ from modules.modelLoader.StableDiffusionModelLoader import StableDiffusionModelL
 from modules.modelLoader.StableDiffusionXLEmbeddingModelLoader import StableDiffusionXLEmbeddingModelLoader
 from modules.modelLoader.StableDiffusionXLLoRAModelLoader import StableDiffusionXLLoRAModelLoader
 from modules.modelLoader.StableDiffusionXLModelLoader import StableDiffusionXLModelLoader
+from modules.modelLoader.StableDiffusionXLRModelLoader import StableDiffusionXLRModelLoader
 from modules.modelSampler import BaseModelSampler
 from modules.modelSampler.KandinskySampler import KandinskySampler
 from modules.modelSampler.StableDiffusionSampler import StableDiffusionSampler
 from modules.modelSampler.StableDiffusionVaeSampler import StableDiffusionVaeSampler
 from modules.modelSampler.StableDiffusionXLSampler import StableDiffusionXLSampler
+from modules.modelSampler.StableDiffusionXLRSampler import StableDiffusionXLRSampler
 from modules.modelSaver.BaseModelSaver import BaseModelSaver
 from modules.modelSaver.KandinskyDiffusionModelSaver import KandinskyModelSaver
 from modules.modelSaver.KandinskyLoRAModelSaver import KandinskyLoRAModelSaver
@@ -36,6 +39,7 @@ from modules.modelSaver.StableDiffusionModelSaver import StableDiffusionModelSav
 from modules.modelSaver.StableDiffusionXLEmbeddingModelSaver import StableDiffusionXLEmbeddingModelSaver
 from modules.modelSaver.StableDiffusionXLLoRAModelSaver import StableDiffusionXLLoRAModelSaver
 from modules.modelSaver.StableDiffusionXLModelSaver import StableDiffusionXLModelSaver
+from modules.modelSaver.StableDiffusionXLRModelSaver import StableDiffusionXLRModelSaver
 from modules.modelSetup.BaseModelSetup import BaseModelSetup
 from modules.modelSetup.KandinskyFineTuneSetup import KandinskyFineTuneSetup
 from modules.modelSetup.KandinskyLoRASetup import KandinskyLoRASetup
@@ -45,6 +49,7 @@ from modules.modelSetup.StableDiffusionFineTuneVaeSetup import StableDiffusionFi
 from modules.modelSetup.StableDiffusionLoRASetup import StableDiffusionLoRASetup
 from modules.modelSetup.StableDiffusionXLEmbeddingSetup import StableDiffusionXLEmbeddingSetup
 from modules.modelSetup.StableDiffusionXLFineTuneSetup import StableDiffusionXLFineTuneSetup
+from modules.modelSetup.StableDiffusionXLRFineTuneSetup import StableDiffusionXLRFineTuneSetup
 from modules.modelSetup.StableDiffusionXLLoRASetup import StableDiffusionXLLoRASetup
 from modules.module.EMAModule import EMAModuleWrapper
 from modules.util.TrainProgress import TrainProgress
@@ -68,6 +73,8 @@ def create_model_loader(
                 return StableDiffusionModelLoader()
             elif model_type.is_stable_diffusion_xl():
                 return StableDiffusionXLModelLoader()
+            elif model_type.is_stable_diffusion_xlr():
+                return StableDiffusionXLRModelLoader()
             elif model_type.is_kandinsky():
                 return KandinskyModelLoader()
         case TrainingMethod.FINE_TUNE_VAE:
@@ -97,6 +104,8 @@ def create_model_saver(
                 return StableDiffusionModelSaver()
             if model_type.is_stable_diffusion_xl():
                 return StableDiffusionXLModelSaver()
+            if model_type.is_stable_diffusion_xlr():
+                return StableDiffusionXLRModelSaver()
             if model_type.is_kandinsky():
                 return KandinskyModelSaver()
         case TrainingMethod.FINE_TUNE_VAE:
@@ -129,6 +138,8 @@ def create_model_setup(
                 return StableDiffusionFineTuneSetup(train_device, temp_device, debug_mode)
             if model_type.is_stable_diffusion_xl():
                 return StableDiffusionXLFineTuneSetup(train_device, temp_device, debug_mode)
+            if model_type.is_stable_diffusion_xlr():
+                return StableDiffusionXLRFineTuneSetup(train_device, temp_device, debug_mode)
             elif model_type.is_kandinsky():
                 return KandinskyFineTuneSetup(train_device, temp_device, debug_mode)
         case TrainingMethod.FINE_TUNE_VAE:
@@ -192,6 +203,8 @@ def create_data_loader(
                 return MgdsStableDiffusionFineTuneDataLoader(args, model, train_progress)
             if model_type.is_stable_diffusion_xl():
                 return MgdsStableDiffusionXLFineTuneDataLoader(args, model, train_progress)
+            if model_type.is_stable_diffusion_xlr():
+                return MgdsStableDiffusionXLRFineTuneDataLoader(args, model, train_progress)
             elif model_type.is_kandinsky():
                 return MgdsKandinskyFineTuneDataLoader(args, model, train_progress)
         case TrainingMethod.FINE_TUNE_VAE:
@@ -226,6 +239,16 @@ def create_optimizer(
                 weight_decay=args.weight_decay,
                 foreach=False,  # disabled, because it uses too much VRAM
             )
+        case Optimizer.SGD_8BIT:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.SGD8bit(
+                params=parameters,
+                lr=args.learning_rate,
+                momentum=args.momentum if hasattr(args, 'momentum') else 0.99,
+                dampening=args.dampening if hasattr(args, 'dampening') else 0,
+                weight_decay=args.weight_decay,
+                nesterov=args.nesterov if hasattr(args, 'nesterov') else False,
+            )
         case Optimizer.ADAM:
             optimizer = torch.optim.Adam(
                 params=parameters,
@@ -251,6 +274,10 @@ def create_optimizer(
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
                 eps=1e-8,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else True,
+                is_paged=args.is_paged if hasattr(args, 'is_paged') else False
             )
         case Optimizer.ADAMW_8BIT:
             import bitsandbytes as bnb
@@ -259,6 +286,10 @@ def create_optimizer(
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
                 eps=1e-8,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else True,
+                is_paged=args.is_paged if hasattr(args, 'is_paged') else True
             )
         case Optimizer.ADAGRAD:
             import bitsandbytes as bnb
@@ -266,32 +297,47 @@ def create_optimizer(
                 params=parameters,
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
-                eps=1e-8,
+                eps= 1e-8,
+                lr_decay=args.lr_decay if hasattr(args, 'lr_decay') else 0,
+                initial_accumulator_value=args.initial_accumulator_value if hasattr(args, 'initial_accumulator_value') else 0,
             )
+
         case Optimizer.ADAGRAD_8BIT:
             import bitsandbytes as bnb
             optimizer = bnb.optim.Adagrad8bit(
                 params=parameters,
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
-                eps=1e-8,
+                eps= 1e-8,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else True,
             )
+
         case Optimizer.RMSPROP:
             import bitsandbytes as bnb
             optimizer = bnb.optim.RMSprop(
                 params=parameters,
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
-                eps=1e-8,
+                eps= 1e-8,
+                alpha=args.alpha if hasattr(args, 'alpha') else 0.99,
+                momentum=args.momentum if hasattr(args, 'momentum') else 0,
+                centered=args.centered if hasattr(args, 'centered') else False,
             )
+
         case Optimizer.RMSPROP_8BIT:
             import bitsandbytes as bnb
             optimizer = bnb.optim.RMSprop8bit(
                 params=parameters,
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
-                eps=1e-8,
+                eps= 1e-8,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else True,
             )
+
         case Optimizer.LION:
             import lion_pytorch as lp
             optimizer = lp.Lion(
@@ -299,6 +345,74 @@ def create_optimizer(
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
             )
+        case Optimizer.LARS:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.LARS(
+                params=parameters,
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+                momentum=args.momentum if hasattr(args, 'momentum') else 0.99,
+                dampening=args.dampening if hasattr(args, 'dampening') else 0,
+                nesterov=args.nesterov if hasattr(args, 'nesterov') else False,
+                max_unorm=args.max_unorm if hasattr(args, 'max_unorm') else 0.02
+            )
+
+        case Optimizer.LARS_8BIT:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.LARS8bit(
+                params=parameters,
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+                momentum=args.momentum if hasattr(args, 'momentum') else 0.99,
+                dampening=args.dampening if hasattr(args, 'dampening') else 0,
+                nesterov=args.nesterov if hasattr(args, 'nesterov') else True,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                max_unorm=args.max_unorm if hasattr(args, 'max_unorm') else 0.02
+            )
+
+        case Optimizer.LAMB:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.LAMB(
+                params=parameters,
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+                betas=args.betas if hasattr(args, 'betas') else (0.9, 0.999),
+                bias_correction=args.bias_correction if hasattr(args, 'bias_correction') else True,
+                amsgrad=args.amsgrad if hasattr(args, 'amsgrad') else False,
+                adam_w_mode=args.adam_w_mode if hasattr(args, 'adam_w_mode') else True,
+                max_unorm=args.max_unorm if hasattr(args, 'max_unorm') else 1.0
+            )
+
+        case Optimizer.LAMB_8BIT:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.LAMB8bit(
+                params=parameters,
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+                betas=args.betas if hasattr(args, 'betas') else (0.9, 0.999),
+                bias_correction=args.bias_correction if hasattr(args, 'bias_correction') else True,
+                amsgrad=args.amsgrad if hasattr(args, 'amsgrad') else False,
+                adam_w_mode=args.adam_w_mode if hasattr(args, 'adam_w_mode') else True,
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else False,
+                max_unorm=args.max_unorm if hasattr(args, 'max_unorm') else 1.0
+            )
+
+        case Optimizer.LION_8BIT:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.Lion8bit(
+                params=parameters,
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay if hasattr(args, 'weight_decay') else 0,
+                betas=args.betas if hasattr(args, 'betas') else (0.9, 0.99),
+                min_8bit_size=args.min_8bit_size if hasattr(args, 'min_8bit_size') else 4096,
+                percentile_clipping=args.percentile_clipping if hasattr(args, 'percentile_clipping') else 100,
+                block_wise=args.block_wise if hasattr(args, 'block_wise') else True,
+                is_paged=args.is_paged if hasattr(args, 'is_paged') else False
+            )
+            
         case Optimizer.DADAPT_SGD:
             import dadaptation as da
             optimizer = da.DAdaptSGD(
