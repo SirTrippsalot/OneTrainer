@@ -506,8 +506,35 @@ def create_optimizer(
                 growth_rate=args.growth_rate,
                 fsdp_in_use=args.fsdp_in_use
             )
-
-
+            
+        # ADAFactor Optimizer
+        case Optimizer.ADAFACTOR:
+            from transformers.optimization import Adafactor
+            if args.relative_step:
+                optimizer = Adafactor(
+                    params=parameters,
+                    # eps=args.eps_tuple,
+                    clip_threshold=args.clip_threshold,
+                    decay_rate=args.decay_rate,
+                    # beta1=args.beta1,
+                    weight_decay=args.weight_decay,
+                    scale_parameter=args.scale_parameter,
+                    relative_step=args.relative_step,
+                    warmup_init=args.warmup_init
+                )
+            else:
+                optimizer = Adafactor(
+                    params=parameters,
+                    lr=args.learning_rate,
+                    # eps=args.eps_tuple,
+                    clip_threshold=args.clip_threshold,
+                    decay_rate=args.decay_rate,
+                    # beta1=args.beta1,
+                    weight_decay=args.weight_decay,
+                    scale_parameter=args.scale_parameter,
+                    relative_step=args.relative_step,
+                    warmup_init=args.warmup_init
+                )
 
     if state_dict is not None:
         for i, params in enumerate(parameters):

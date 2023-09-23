@@ -41,5 +41,8 @@ class Optimizer(Enum):
     # Prodigy
     PRODIGY = 'PRODIGY'
     
+    # ADAFACTOR
+    ADAFACTOR = 'ADAFACTOR'
+    
     def __str__(self):
         return self.value

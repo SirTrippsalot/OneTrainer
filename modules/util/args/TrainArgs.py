@@ -322,6 +322,14 @@ class TrainArgs(BaseArgs):
         args["d_coef"] = 1.0
         args["growth_rate"] = float('inf')
         args["fsdp_in_use"] = False
+        args["clip_threshold"] = 1.0
+        args["decay_rate"] = -0.8
+        args["beta1"] = None
+        args["weight_decay"] = 0.0
+        args["scale_parameter"] = True
+        args["relative_step"] = True
+        args["warmup_init"] = False
+        args["eps_tuple"] = (1e-30, 1e-3)
 
         # sample settings
         args["sample_definition_file_name"] = "training_samples/samples.json"
