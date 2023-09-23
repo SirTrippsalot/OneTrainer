@@ -13,6 +13,9 @@ from modules.ui.CaptionUI import CaptionUI
 from modules.ui.ConceptTab import ConceptTab
 from modules.ui.ConvertModelUI import ConvertModelUI
 from modules.ui.SampleWindow import SampleWindow
+from modules.ui.LossParamsWindow import LossParamsWindow
+from modules.ui.OptimizerParamsWindow import OptimizerParamsWindow
+from modules.ui.SchedulerParamsWindow import SchedulerParamsWindow
 from modules.ui.SamplingTab import SamplingTab
 from modules.ui.TopBar import TopBar
 from modules.util.TrainProgress import TrainProgress
@@ -306,9 +309,15 @@ class TrainUI(ctk.CTk):
 
         # column 1
         # optimizer
+        '''
         components.label(scroll_frame, 0, 0, "Optimizer",
                          tooltip="The type of optimizer")
         components.options(scroll_frame, 0, 1, [str(x) for x in list(Optimizer)], self.ui_state, "optimizer")
+        '''
+        
+        components.label(scroll_frame, 0, 0, "Optimizer",
+                         tooltip="Detailed Optimizer Settings")
+        components.button(scroll_frame, 0, 1, "Optimizer Settings", self.open_optimizer_params_window)
 
         # learning rate scheduler
         components.label(scroll_frame, 1, 0, "Learning Rate Scheduler",
@@ -633,6 +642,18 @@ class TrainUI(ctk.CTk):
 
     def open_convert_model_tool(self):
         window = ConvertModelUI(self)
+        self.wait_window(window)
+
+    def open_scheduler_params_window(self):
+        window = SchedulerParamsWindow(self)
+        self.wait_window(window)
+
+    def open_optimizer_params_window(self):
+        window = OptimizerParamsWindow(self, self.ui_state)
+        self.wait_window(window)
+
+    def open_loss_params_window(self):
+        window = LossParamsWindow(self)
         self.wait_window(window)
 
     def open_sample_ui(self):
