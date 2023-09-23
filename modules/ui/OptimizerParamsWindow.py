@@ -70,34 +70,41 @@ class OptimizerParamsWindow(ctk.CTkToplevel):
 
         #Lookup for the title and tooltip for a key
         KEY_DETAIL_MAP = {
-            'centered': {'title': 'Centered', 'tooltip': 'Whether to center the gradient before scaling. Great for stabilizing the training process.', 'type': 'bool'},
-            'eps': {'title': 'EPS', 'tooltip': 'A small value to prevent division by zero.', 'type': 'float'},
-            'weight_decay': {'title': 'Weight Decay', 'tooltip': 'Regularization to prevent overfitting.', 'type': 'float'},
-            'lr_decay': {'title': 'LR Decay', 'tooltip': 'Rate at which learning rate decreases.', 'type': 'float'},
-            'initial_accumulator_value': {'title': 'Initial Accumulator Value', 'tooltip': 'Initial value for Adagrad optimizer.', 'type': 'float'},
-            'momentum': {'title': 'Momentum', 'tooltip': 'Factor to accelerate SGD in relevant direction.', 'type': 'float'},
-            'dampening': {'title': 'Dampening', 'tooltip': 'Dampening for momentum.', 'type': 'float'},
-            'nesterov': {'title': 'Nesterov', 'tooltip': 'Whether to enable Nesterov momentum.', 'type': 'bool'},
+            'adam_w_mode': {'title': 'Adam W Mode', 'tooltip': 'Whether to use weight decay correction for Adam optimizer.', 'type': 'bool'},
             'alpha': {'title': 'Alpha', 'tooltip': 'Smoothing parameter for RMSprop and others.', 'type': 'float'},
             'amsgrad': {'title': 'AMSGrad', 'tooltip': 'Whether to use the AMSGrad variant for Adam.', 'type': 'bool'},
-            'bias_correction': {'title': 'Bias Correction', 'tooltip': 'Whether to use bias correction in optimization algorithms like Adam.', 'type': 'bool'},
-            'adam_w_mode': {'title': 'Adam W Mode', 'tooltip': 'Whether to use weight decay correction for Adam optimizer.', 'type': 'bool'},
-            'betas': {'title': 'Betas', 'tooltip': 'Coefficients for computing running averages of gradient.', 'type': 'tuple[float, float]'},
+            'beta1': {'title': 'Beta1', 'tooltip': 'Momentum term.', 'type': 'float'},
             'beta3': {'title': 'Beta3', 'tooltip': 'Coefficient for computing the Prodigy stepsize.', 'type': 'float'},
-            'decouple': {'title': 'Decouple', 'tooltip': 'Use AdamW style decoupled weight decay.', 'type': 'bool'},
-            'use_bias_correction': {'title': 'Bias Correction', 'tooltip': 'Turn on Adam\'s bias correction.', 'type': 'bool'},
-            'safeguard_warmup': {'title': 'Safeguard Warmup', 'tooltip': 'Avoid issues during warm-up stage.', 'type': 'bool'},
+            'betas': {'title': 'Betas', 'tooltip': 'Coefficients for computing running averages of gradient.', 'type': 'tuple[float, float]'},
+            'bias_correction': {'title': 'Bias Correction', 'tooltip': 'Whether to use bias correction in optimization algorithms like Adam.', 'type': 'bool'},
+            'block_wise': {'title': 'Block Wise', 'tooltip': 'Whether to perform block-wise model update.', 'type': 'bool'},
+            'centered': {'title': 'Centered', 'tooltip': 'Whether to center the gradient before scaling. Great for stabilizing the training process.', 'type': 'bool'},
+            'clip_threshold': {'title': 'Clip Threshold', 'tooltip': 'Clipping value for gradients.', 'type': 'float'},
             'd0': {'title': 'Initial D', 'tooltip': 'Initial D estimate for D-adaptation.', 'type': 'float'},
             'd_coef': {'title': 'D Coefficient', 'tooltip': 'Coefficient in the expression for the estimate of d.', 'type': 'float'},
-            'growth_rate': {'title': 'Growth Rate', 'tooltip': 'Limit for D estimate growth rate.', 'type': 'float'},
-            'fsdp_in_use': {'title': 'FSDP in Use', 'tooltip': 'Flag for using sharded parameters.', 'type': 'bool'},
-            'clip_threshold': {'title': 'Clip Threshold', 'tooltip': 'Clipping value for gradients.', 'type': 'float'},
+            'dampening': {'title': 'Dampening', 'tooltip': 'Dampening for momentum.', 'type': 'float'},
             'decay_rate': {'title': 'Decay Rate', 'tooltip': 'Rate of decay for moment estimation.', 'type': 'float'},
-            'beta1': {'title': 'Beta1', 'tooltip': 'Momentum term.', 'type': 'float'},
-            'scale_parameter': {'title': 'Scale Parameter', 'tooltip': 'Whether to scale the parameter or not.', 'type': 'bool'},
-            'relative_step': {'title': 'Relative Step', 'tooltip': 'Whether to use a relative step size.', 'type': 'bool'},
-            'warmup_init': {'title': 'Warmup Initialization', 'tooltip': 'Whether to warm-up the optimizer initialization.', 'type': 'bool'},
+            'decouple': {'title': 'Decouple', 'tooltip': 'Use AdamW style decoupled weight decay.', 'type': 'bool'},
+            'eps': {'title': 'EPS', 'tooltip': 'A small value to prevent division by zero.', 'type': 'float'},
             'eps_tuple': {'title': 'EPS', 'tooltip': 'A small value to prevent division by zero.', 'type': 'tuple[float, float]'},
+            'foreach': {'title': 'ForEach', 'tooltip': 'If true, apply the optimizer to each parameter independently.', 'type': 'bool'},
+            'fsdp_in_use': {'title': 'FSDP in Use', 'tooltip': 'Flag for using sharded parameters.', 'type': 'bool'},
+            'fused': {'title': 'Fused', 'tooltip': 'Whether to use a fused implementation if available.', 'type': 'bool'},
+            'growth_rate': {'title': 'Growth Rate', 'tooltip': 'Limit for D estimate growth rate.', 'type': 'float'},
+            'initial_accumulator_value': {'title': 'Initial Accumulator Value', 'tooltip': 'Initial value for Adagrad optimizer.', 'type': 'float'},
+            'is_paged': {'title': 'Is Paged', 'tooltip': 'Whether the optimizer\'s internal state should be paged to CPU.', 'type': 'bool'},
+            'lr_decay': {'title': 'LR Decay', 'tooltip': 'Rate at which learning rate decreases.', 'type': 'float'},
+            'max_unorm': {'title': 'Max Unorm', 'tooltip': 'Maximum value for gradient clipping by norms.', 'type': 'float'},
+            'min_8bit_size': {'title': 'Min 8bit Size', 'tooltip': 'Minimum tensor size for 8-bit quantization.', 'type': 'int'},
+            'momentum': {'title': 'Momentum', 'tooltip': 'Factor to accelerate SGD in relevant direction.', 'type': 'float'},
+            'nesterov': {'title': 'Nesterov', 'tooltip': 'Whether to enable Nesterov momentum.', 'type': 'bool'},
+            'percentile_clipping': {'title': 'Percentile Clipping', 'tooltip': 'Gradient clipping based on percentile values.', 'type': 'float'},
+            'relative_step': {'title': 'Relative Step', 'tooltip': 'Whether to use a relative step size.', 'type': 'bool'},
+            'safeguard_warmup': {'title': 'Safeguard Warmup', 'tooltip': 'Avoid issues during warm-up stage.', 'type': 'bool'},
+            'scale_parameter': {'title': 'Scale Parameter', 'tooltip': 'Whether to scale the parameter or not.', 'type': 'bool'},
+            'use_bias_correction': {'title': 'Bias Correction', 'tooltip': 'Turn on Adam\'s bias correction.', 'type': 'bool'},
+            'warmup_init': {'title': 'Warmup Initialization', 'tooltip': 'Whether to warm-up the optimizer initialization.', 'type': 'bool'},
+            'weight_decay': {'title': 'Weight Decay', 'tooltip': 'Regularization to prevent overfitting.', 'type': 'float'},
         }
         
         for idx, key in enumerate(OPTIMIZER_KEY_MAP[selected_optimizer]):
@@ -135,7 +142,11 @@ class OptimizerParamsWindow(ctk.CTkToplevel):
         self.create_dynamic_ui(selected_optimizer, self.frame, components, self.ui_state)
             
     def clear_dynamic_ui(self, master):
-        for widget in master.winfo_children():
-            grid_info = widget.grid_info()
-            if int(grid_info["row"]) >= 1:
-                widget.destroy()
+        try:
+            for widget in master.winfo_children():
+                grid_info = widget.grid_info()
+                if int(grid_info["row"]) >= 1:
+                    widget.destroy()
+        except _tkinter.TclError as e:
+            pass
+            
