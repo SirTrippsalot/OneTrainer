@@ -104,12 +104,12 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
         model.vae.requires_grad_(False)
 
         text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
-        text_encoder_train_switch = args.text_encoder_2_train_switch and (model.train_progress.epoch < args.text_encoder_2_max_train_epochs)
+        text_encoder_2_train_switch = args.text_encoder_2_train_switch and (model.train_progress.epoch < args.text_encoder_2_max_train_epochs)
         
         if model.text_encoder_1_lora is not None:
             model.text_encoder_1_lora.requires_grad_(text_encoder_train_switch)
         if model.text_encoder_2_lora is not None:
-            model.text_encoder_2_lora.requires_grad_(text_encoder_train_switch)
+            model.text_encoder_2_lora.requires_grad_(text_encoder_2_train_switch)
 
         unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
         if model.unet_lora is not None:
