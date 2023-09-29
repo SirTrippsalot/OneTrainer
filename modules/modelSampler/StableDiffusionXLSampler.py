@@ -157,8 +157,11 @@ class StableDiffusionXLSampler(BaseModelSampler):
 
         # prepare timesteps
         timesteps = noise_scheduler.timesteps
+        
+        # Make sure timesteps is on the same device as last_timestep
+        timesteps = timesteps.to(self.train_device)
 
-        if force_last_timestep and 1==0:
+        if force_last_timestep:
             last_timestep = torch.ones(1, device=self.train_device, dtype=torch.int64) \
                             * (noise_scheduler.config.num_train_timesteps - 1)
 

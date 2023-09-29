@@ -363,9 +363,9 @@ class GenericTrainer(BaseTrainer):
 
         lr_scheduler = create.create_lr_scheduler(
             optimizer=self.model.optimizer,
-            learning_rate_scheduler=self.args.learning_rate_scheduler,
-            warmup_steps=self.args.learning_rate_warmup_steps,
-            num_cycles=self.args.learning_rate_cycles,
+            global_learning_rate_scheduler=self.args.global_learning_rate_scheduler,
+            warmup_steps=self.args.global_warmup_steps,
+            num_cycles=self.args.global_num_cycles,
             num_epochs=self.args.epochs,
             approximate_epoch_length=self.data_loader.ds.approximate_length(),
             batch_size=self.args.batch_size,

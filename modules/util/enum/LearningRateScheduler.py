@@ -3,8 +3,7 @@ from enum import Enum
 
 class LearningRateScheduler(Enum):
     CONSTANT = 'CONSTANT'
-    COSINE_DOWN = 'COSINE_DOWN'
-    COSINE_UP = 'COSINE_UP'
+    COSINE = 'COSINE'
     COSINE_WITH_HARD_RESTARTS = 'COSINE_WITH_HARD_RESTARTS'
     REX = 'REX'
     TRIANGLE = 'TRIANGLE'

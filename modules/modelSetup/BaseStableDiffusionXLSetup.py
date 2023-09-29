@@ -107,7 +107,7 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
             original_samples=scaled_latent_image, noise=latent_noise, timesteps=timestep
         )
 
-        if args.train_text_encoder or args.training_method == TrainingMethod.EMBEDDING:
+        if args.text_encoder_train_switch or args.training_method == TrainingMethod.EMBEDDING:
             text_encoder_1_output = model.text_encoder_1(
                 batch['tokens_1'], output_hidden_states=True, return_dict=True
             )
@@ -168,25 +168,14 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
             model_output_data = {
                 'predicted': predicted_latent_noise,
                 'target': latent_noise,
+                'timesteps': timestep,
             }
         elif model.noise_scheduler.config.prediction_type == 'v_prediction':
-            alphas_cumprod = model.noise_scheduler.alphas_cumprod.to(args.train_device)
-            sqrt_alpha_prod = alphas_cumprod[timestep] ** 0.5
-            sqrt_alpha_prod = sqrt_alpha_prod.flatten().reshape(-1, 1, 1, 1)
-
-            sqrt_one_minus_alpha_prod = (1 - alphas_cumprod[timestep]) ** 0.5
-            sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten().reshape(-1, 1, 1, 1)
-
-            scaled_predicted_latent_image = \
-                (scaled_noisy_latent_image - predicted_latent_noise * sqrt_one_minus_alpha_prod) \
-                / sqrt_alpha_prod
-
             target_velocity = model.noise_scheduler.get_velocity(scaled_latent_image, latent_noise, timestep)
             model_output_data = {
-                 'predicted': predicted_latent_noise,
-                 'target': target_velocity,
-                # 'predicted': self.project_latent_to_image(scaled_predicted_latent_image).clamp(-1, 1),
-                # 'target': self.project_latent_to_image(scaled_latent_image).clamp(-1, 1)
+                'predicted': predicted_latent_noise,
+                'target': target_velocity,
+                'timesteps': timestep,
             }
 
         if args.debug_mode:
@@ -243,6 +232,27 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
 
         return model_output_data
 
+    def get_snr_scale(self, timesteps):
+        capped_snr = torch.clamp(torch.stack([self.noise_scheduler.all_snr[t] for t in timesteps]), max=1000)
+        scale = capped_snr / (capped_snr + 1)
+        return scale
+              
+    def apply_snr_weight_to_loss(self, loss, timesteps, gamma):
+        snr_values = torch.stack([self.noise_scheduler.all_snr[t] for t in timesteps])
+        gamma_over_snr = gamma / snr_values
+        snr_weight = torch.clamp(gamma_over_snr, max=1).to(loss.device)
+        return loss * snr_weight
+
+    def scale_loss_by_noise(self, loss, timesteps):
+        scale = self.get_snr_scale(timesteps)
+        return loss * scale
+
+    def add_v_prediction_loss(self, loss, timesteps, v_pred_like_loss):
+        scale = self.get_snr_scale(timesteps)
+        adjusted_loss = loss + (loss / scale) * v_pred_like_loss
+        return adjusted_loss
+
+
     def calculate_loss(
             self,
             model: StableDiffusionXLModel,
@@ -253,15 +263,13 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
     ) -> Tensor:
         predicted = data['predicted']
         target = data['target']
-        # predicted = data['predicted-image']
-        # target = data['target-image']
+        timesteps = data['timesteps']
         
         #Defining Stregths to facilitate UI integration
         mse_strength = 0.5
         mae_strength = 0.5
         cosine_strength = 0.2
         mae_losses, mse_losses, cosine_sim_losses = 0, 0, 0
-
 
         # TODO: don't disable masked loss functions when has_conditioning_image_input is true.
         #  This breaks if only the VAE is trained, but was loaded from an inpainting checkpoint
@@ -306,8 +314,15 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
                 mse_strength * mse_losses +          
                 mae_strength * mae_losses + 
                 cosine_strength * cosine_sim_losses
-            ).mean()
+            ).mean([1, 2, 3])
             
+            # if model.noise_scheduler.config.prediction_type == 'v_prediction':            
+                # if 1 == 0: # args.min_snr_gamma:
+                    # losses = self.apply_snr_weight_to_loss(losses, timesteps, predicted, args.min_snr_gamma)
+                # if 1 == 1: # args.scale_v_snr_loss:
+                    # losses = self.scale_loss_by_noise(losses, timesteps, predicted)
+                # if 1 == 1: # args.v_pred_like_loss
+                    # losses = self.add_v_prediction_loss(losses, timesteps, predicted, 0.1) # args.v_pred_like_loss)            
             if args.normalize_masked_area_loss:
                 clamped_mask = torch.clamp(batch['latent_mask'], args.unmasked_weight, 1)
                 losses = losses / clamped_mask.mean(dim=(1, 2, 3))

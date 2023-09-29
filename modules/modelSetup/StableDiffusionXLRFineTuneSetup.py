@@ -30,10 +30,10 @@ class StableDiffusionXLRFineTuneSetup(BaseStableDiffusionXLRSetup):
     ) -> Iterable[Parameter]:
         params = list()
 
-        if args.train_text_encoder:
+        if args.text_encoder_train_switch:
             params += list(model.text_encoder_2.parameters())
 
-        if args.train_unet:
+        if args.unet_train_switch:
             params += list(model.unet.parameters())
 
         return params
@@ -45,16 +45,16 @@ class StableDiffusionXLRFineTuneSetup(BaseStableDiffusionXLRSetup):
     ) -> Iterable[Parameter] | list[dict]:
         param_groups = list()
 
-        if args.train_text_encoder:
-            lr = args.text_encoder_learning_rate if args.text_encoder_learning_rate is not None else args.learning_rate
+        if args.text_encoder_train_switch:
+            lr = args.text_encoder_learning_rate if args.text_encoder_learning_rate is not None else args.global_learning_rate
             param_groups.append({
                 'params': model.text_encoder_2.parameters(),
                 'lr': lr,
                 'initial_lr': lr,
             })
 
-        if args.train_unet:
-            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.learning_rate
+        if args.unet_train_switch:
+            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.global_learning_rate
             param_groups.append({
                 'params': model.unet.parameters(),
                 'lr': lr,
@@ -69,11 +69,11 @@ class StableDiffusionXLRFineTuneSetup(BaseStableDiffusionXLRSetup):
             args: TrainArgs,
     ):
 
-        train_text_encoder = args.train_text_encoder and (model.train_progress.epoch < args.train_text_encoder_epochs)
-        model.text_encoder_2.requires_grad_(train_text_encoder)
+        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        model.text_encoder_2.requires_grad_(text_encoder_train_switch)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet.requires_grad_(unet_train_switch)
 
         model.vae.requires_grad_(False)
 
@@ -106,11 +106,11 @@ class StableDiffusionXLRFineTuneSetup(BaseStableDiffusionXLRSetup):
             model: StableDiffusionXLRModel,
             args: TrainArgs,
     ):
-        model.text_encoder_2.to(self.train_device if args.train_text_encoder else self.temp_device)
+        model.text_encoder_2.to(self.train_device if args.text_encoder_train_switch else self.temp_device)
         model.vae.to(self.temp_device)
         model.unet.to(self.train_device)
 
-        if args.train_text_encoder:
+        if args.text_encoder_train_switch:
             model.text_encoder_2.train()
         else:
             model.text_encoder_2.eval()
@@ -124,8 +124,8 @@ class StableDiffusionXLRFineTuneSetup(BaseStableDiffusionXLRSetup):
             args: TrainArgs,
             train_progress: TrainProgress
     ):
-        train_text_encoder = args.train_text_encoder and (model.train_progress.epoch < args.train_text_encoder_epochs)
-        model.text_encoder_2.requires_grad_(train_text_encoder)
+        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        model.text_encoder_2.requires_grad_(text_encoder_train_switch)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet.requires_grad_(unet_train_switch)

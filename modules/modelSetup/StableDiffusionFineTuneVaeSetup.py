@@ -38,8 +38,8 @@ class StableDiffusionFineTuneVaeSetup(BaseStableDiffusionSetup):
         return [
             {
                 'params': model.vae.decoder.parameters(),
-                'lr': args.learning_rate,
-                'initial_lr': args.learning_rate,
+                'lr': args.global_learning_rate,
+                'initial_lr': args.global_learning_rate,
             }
         ]
 

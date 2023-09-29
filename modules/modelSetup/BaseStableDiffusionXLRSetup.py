@@ -106,7 +106,7 @@ class BaseStableDiffusionXLRSetup(BaseModelSetup, metaclass=ABCMeta):
             original_samples=scaled_latent_image, noise=latent_noise, timesteps=timestep
         )
 
-        if args.train_text_encoder or args.training_method == TrainingMethod.EMBEDDING:
+        if args.text_encoder_train_switch or args.training_method == TrainingMethod.EMBEDDING:
 
             text_encoder_2_output = model.text_encoder_2(
                 batch['tokens_2'], output_hidden_states=True, return_dict=True

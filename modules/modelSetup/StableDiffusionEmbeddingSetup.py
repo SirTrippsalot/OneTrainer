@@ -44,8 +44,8 @@ class StableDiffusionEmbeddingSetup(BaseStableDiffusionSetup):
         return [
             {
                 'params': model.text_encoder.get_input_embeddings().parameters(),
-                'lr': args.learning_rate,
-                'initial_lr': args.learning_rate,
+                'lr': args.global_learning_rate,
+                'initial_lr': args.global_learning_rate,
             }
         ]
 

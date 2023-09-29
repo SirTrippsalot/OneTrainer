@@ -5,6 +5,8 @@ from transformers import CLIPTextModel, CLIPTokenizer, CLIPTextModelWithProjecti
 from modules.model.BaseModel import BaseModel
 from modules.module.LoRAModule import LoRAModuleWrapper
 from modules.util.TrainProgress import TrainProgress
+from modules.util.convert.rescale_noise_scheduler_to_zero_terminal_snr import \
+    rescale_noise_scheduler_to_zero_terminal_snr
 from modules.util.enum.ModelType import ModelType
 from modules.util.modelSpec.ModelSpec import ModelSpec
 
@@ -93,3 +95,15 @@ class StableDiffusionXLModel(BaseModel):
             unet=self.unet,
             scheduler=self.noise_scheduler,
         )
+
+    def force_v_prediction(self):
+        self.noise_scheduler.config.prediction_type = 'v_prediction'
+        self.sd_config['model']['params']['parameterization'] = 'v'
+
+    def force_epsilon_prediction(self):
+        self.noise_scheduler.config.prediction_type = 'epsilon'
+        self.sd_config['model']['params']['parameterization'] = 'epsilon'
+
+    def rescale_noise_scheduler_to_zero_terminal_snr(self):
+        rescale_noise_scheduler_to_zero_terminal_snr(self.noise_scheduler)
+

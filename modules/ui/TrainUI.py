@@ -318,22 +318,22 @@ class TrainUI(ctk.CTk):
         components.label(scroll_frame, 1, 0, "Learning Rate Scheduler",
                          tooltip="Learning rate scheduler that automatically changes the learning rate during training")
         components.options_adv(scroll_frame, 1, 1, [str(x) for x in list(LearningRateScheduler)], self.ui_state,
-                           "learning_rate_scheduler", self.open_scheduler_params_window)
+                           "global_learning_rate_scheduler", self.open_scheduler_params_window)
 
         # learning rate
         components.label(scroll_frame, 2, 0, "Learning Rate",
                          tooltip="The base learning rate")
-        components.entry(scroll_frame, 2, 1, self.ui_state, "learning_rate")
+        components.entry(scroll_frame, 2, 1, self.ui_state, "global_learning_rate")
 
         # learning rate warmup steps
         components.label(scroll_frame, 3, 0, "Learning Rate Warmup Steps",
                          tooltip="The number of steps it takes to gradually increase the learning rate from 0 to the specified learning rate")
-        components.entry(scroll_frame, 3, 1, self.ui_state, "learning_rate_warmup_steps")
+        components.entry(scroll_frame, 3, 1, self.ui_state, "global_warmup_steps")
 
         # learning rate cycles
         components.label(scroll_frame, 4, 0, "Learning Rate Cycles",
                          tooltip="The number of learning rate cycles. This is only applicable if the learning rate scheduler supports cycles")
-        components.entry(scroll_frame, 4, 1, self.ui_state, "learning_rate_cycles")
+        components.entry(scroll_frame, 4, 1, self.ui_state, "global_num_cycles")
 
         # epochs
         components.label(scroll_frame, 5, 0, "Epochs",
@@ -376,12 +376,12 @@ class TrainUI(ctk.CTk):
         # train text encoder
         components.label(scroll_frame, 0, 3, "Train Text Encoder",
                          tooltip="Enables training the text encoder model")
-        components.switch(scroll_frame, 0, 4, self.ui_state, "train_text_encoder")
+        components.switch(scroll_frame, 0, 4, self.ui_state, "text_encoder_train_switch")
 
         # train text encoder epochs
         components.label(scroll_frame, 1, 3, "Train Text Encoder Epochs",
                          tooltip="Number of epochs to train the text encoder")
-        components.entry(scroll_frame, 1, 4, self.ui_state, "train_text_encoder_epochs")
+        components.entry(scroll_frame, 1, 4, self.ui_state, "text_encoder_max_train_epochs")
 
         # text encoder learning rate
         components.label(scroll_frame, 2, 3, "Text Encoder Learning Rate",
@@ -422,12 +422,12 @@ class TrainUI(ctk.CTk):
         # train unet
         components.label(scroll_frame, 0, 6, "Train UNet",
                          tooltip="Enables training the U-Net model")
-        components.switch(scroll_frame, 0, 7, self.ui_state, "train_unet")
+        components.switch(scroll_frame, 0, 7, self.ui_state, "unet_train_switch")
 
         # train unet epochs
         components.label(scroll_frame, 1, 6, "Train UNet Epochs",
                          tooltip="Number of epochs to train the U-Net")
-        components.entry(scroll_frame, 1, 7, self.ui_state, "train_unet_epochs")
+        components.entry(scroll_frame, 1, 7, self.ui_state, "unet_max_train_epochs")
 
         # unet learning rate
         components.label(scroll_frame, 2, 6, "Unet Learning Rate",
@@ -635,7 +635,7 @@ class TrainUI(ctk.CTk):
         self.wait_window(window)
 
     def open_scheduler_params_window(self):
-        window = SchedulerParamsWindow(self)
+        window = SchedulerParamsWindow(self, self.ui_state)
         self.wait_window(window)
 
     def open_optimizer_params_window(self):
@@ -643,7 +643,7 @@ class TrainUI(ctk.CTk):
         self.wait_window(window)
 
     def open_loss_params_window(self):
-        window = LossParamsWindow(self)
+        window = LossParamsWindow(self, self.ui_state)
         self.wait_window(window)
 
     def open_sample_ui(self):

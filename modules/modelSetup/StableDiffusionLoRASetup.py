@@ -31,10 +31,10 @@ class StableDiffusionLoRASetup(BaseStableDiffusionSetup):
     ) -> Iterable[Parameter]:
         params = list()
 
-        if args.train_text_encoder:
+        if args.text_encoder_train_switch:
             params += list(model.text_encoder_lora.parameters())
 
-        if args.train_unet:
+        if args.unet_train_switch:
             params += list(model.unet_lora.parameters())
 
         return params
@@ -46,16 +46,16 @@ class StableDiffusionLoRASetup(BaseStableDiffusionSetup):
     ) -> Iterable[Parameter] | list[dict]:
         param_groups = list()
 
-        if args.train_text_encoder:
-            lr = args.text_encoder_learning_rate if args.text_encoder_learning_rate is not None else args.learning_rate
+        if args.text_encoder_train_switch:
+            lr = args.text_encoder_learning_rate if args.text_encoder_learning_rate is not None else args.global_learning_rate
             param_groups.append({
                 'params': model.text_encoder_lora.parameters(),
                 'lr': lr,
                 'initial_lr': lr,
             })
 
-        if args.train_unet:
-            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.learning_rate
+        if args.unet_train_switch:
+            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.global_learning_rate
             param_groups.append({
                 'params': model.unet_lora.parameters(),
                 'lr': lr,
@@ -83,11 +83,11 @@ class StableDiffusionLoRASetup(BaseStableDiffusionSetup):
         model.unet.requires_grad_(False)
         model.vae.requires_grad_(False)
 
-        train_text_encoder = args.train_text_encoder and (model.train_progress.epoch < args.train_text_encoder_epochs)
-        model.text_encoder_lora.requires_grad_(train_text_encoder)
+        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        model.text_encoder_lora.requires_grad_(text_encoder_train_switch)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet_lora.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet_lora.requires_grad_(unet_train_switch)
 
         model.text_encoder_lora.to(dtype=args.lora_weight_dtype.torch_dtype())
         model.unet_lora.to(dtype=args.lora_weight_dtype.torch_dtype())
@@ -158,8 +158,8 @@ class StableDiffusionLoRASetup(BaseStableDiffusionSetup):
             args: TrainArgs,
             train_progress: TrainProgress
     ):
-        train_text_encoder = args.train_text_encoder and (model.train_progress.epoch < args.train_text_encoder_epochs)
-        model.text_encoder_lora.requires_grad_(train_text_encoder)
+        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        model.text_encoder_lora.requires_grad_(text_encoder_train_switch)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet_lora.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet_lora.requires_grad_(unet_train_switch)

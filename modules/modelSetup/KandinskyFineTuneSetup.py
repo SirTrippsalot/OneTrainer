@@ -119,8 +119,8 @@ class KandinskyFineTuneSetup(BaseKandinskySetup):
             args: TrainArgs,
             train_progress: TrainProgress
     ):
-        train_text_encoder = args.train_text_encoder and (model.train_progress.epoch < args.train_text_encoder_epochs)
-        model.text_encoder.requires_grad_(train_text_encoder)
+        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        model.text_encoder.requires_grad_(text_encoder_train_switch)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet.requires_grad_(unet_train_switch)

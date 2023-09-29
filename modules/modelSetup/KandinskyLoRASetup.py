@@ -31,7 +31,7 @@ class KandinskyLoRASetup(BaseKandinskySetup):
     ) -> Iterable[Parameter]:
         params = list()
 
-        if args.train_unet:
+        if args.unet_train_switch:
             params += list(model.unet_lora.parameters())
 
         return params
@@ -43,8 +43,8 @@ class KandinskyLoRASetup(BaseKandinskySetup):
     ) -> Iterable[Parameter] | list[dict]:
         param_groups = list()
 
-        if args.train_unet:
-            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.learning_rate
+        if args.unet_train_switch:
+            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.global_learning_rate
             param_groups.append({
                 'params': model.unet_lora.parameters(),
                 'lr': lr,
@@ -71,8 +71,8 @@ class KandinskyLoRASetup(BaseKandinskySetup):
         model.unet.requires_grad_(False)
         model.movq.requires_grad_(False)
 
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet_lora.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet_lora.requires_grad_(unet_train_switch)
 
         model.unet_lora.to(dtype=args.lora_weight_dtype.torch_dtype())
 
@@ -143,5 +143,5 @@ class KandinskyLoRASetup(BaseKandinskySetup):
             args: TrainArgs,
             train_progress: TrainProgress
     ):
-        train_unet = args.train_unet and (model.train_progress.epoch < args.train_unet_epochs)
-        model.unet_lora.requires_grad_(train_unet)
+        unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
+        model.unet_lora.requires_grad_(unet_train_switch)

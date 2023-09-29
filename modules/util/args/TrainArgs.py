@@ -45,10 +45,10 @@ class TrainArgs(BaseArgs):
 
     # training settings
     optimizer: Optimizer
-    learning_rate_scheduler: LearningRateScheduler
+    global_learning_rate_scheduler: LearningRateScheduler
     learning_rate: float
-    learning_rate_warmup_steps: int
-    learning_rate_cycles: float
+    global_warmup_steps: int
+    global_num_cycles: float
     weight_decay: float
     epochs: int
     batch_size: int
@@ -56,12 +56,12 @@ class TrainArgs(BaseArgs):
     ema: EMAMode
     ema_decay: float
     ema_update_step_interval: int
-    train_text_encoder: bool
-    train_text_encoder_epochs: int
+    text_encoder_train_switch: bool
+    text_encoder_max_train_epochs: int
     text_encoder_learning_rate: float
     text_encoder_layer_skip: int
-    train_unet: bool
-    train_unet_epochs: int
+    unet_train_switch: bool
+    unet_max_train_epochs: int
     unet_learning_rate: float
     offset_noise_weight: float
     rescale_noise_scheduler_to_zero_terminal_snr: bool
@@ -121,7 +121,7 @@ class TrainArgs(BaseArgs):
             return [weight_dtypes.vae]
         elif self.training_method == TrainingMethod.FINE_TUNE:
             dtypes = []
-            if self.train_text_encoder:
+            if self.text_encoder_train_switch:
                 dtypes.append(weight_dtypes.text_encoder)
             elif self.unet_weight_dtype:
                 dtypes.append(weight_dtypes.unet)
@@ -163,10 +163,10 @@ class TrainArgs(BaseArgs):
 
         # training settings
         parser.add_argument("--optimizer", type=Optimizer, required=False, default=Optimizer.ADAMW, dest="optimizer", help="The optimizer", choices=list(Optimizer))
-        parser.add_argument("--learning-rate-scheduler", type=LearningRateScheduler, required=False, default=LearningRateScheduler.CONSTANT, dest="learning_rate_scheduler", help="The learning rate scheduler")
+        parser.add_argument("--learning-rate-scheduler", type=LearningRateScheduler, required=False, default=LearningRateScheduler.CONSTANT, dest="global_learning_rate_scheduler", help="The learning rate scheduler")
         parser.add_argument("--learning-rate", type=float, required=False, default=3e-6, dest="learning_rate", help="The learning rate used when creating the optimizer")
-        parser.add_argument("--learning-rate-warmup-steps", type=int, required=False, default=0, dest="learning_rate_warmup_steps", help="The number of warmup steps when creating the learning rate scheduler")
-        parser.add_argument("--learning-rate-cycles", type=float, required=False, default=1, dest="learning_rate_cycles", help="The number of cycles of the learning rate scheduler")
+        parser.add_argument("--learning-rate-warmup-steps", type=int, required=False, default=0, dest="global_warmup_steps", help="The number of warmup steps when creating the learning rate scheduler")
+        parser.add_argument("--learning-rate-cycles", type=float, required=False, default=1, dest="global_num_cycles", help="The number of cycles of the learning rate scheduler")
         parser.add_argument("--weight-decay", type=float, required=False, default=1e-2, dest="weight_decay", help="The weight decay used when creating the optimizer")
         parser.add_argument("--epochs", type=int, required=True, dest="epochs", help="Number of epochs to train")
         parser.add_argument("--batch-size", type=int, required=True, dest="batch_size", help="The batch size")
@@ -174,12 +174,12 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--ema", type=EMAMode, required=False, default=EMAMode.OFF, dest="ema", help="Activate EMA during training", choices=list(EMAMode))
         parser.add_argument("--ema-decay", type=float, required=False, default=0.999, dest="ema_decay", help="Decay parameter of the EMA model")
         parser.add_argument("--ema-update-step-interval", type=int, required=False, default=5, dest="ema_update_step_interval", help="")
-        parser.add_argument("--train-text-encoder", required=False, action='store_true', dest="train_text_encoder", help="Whether the text encoder should be trained")
-        parser.add_argument("--train-text-encoder-epochs", type=int, required=False, default=2 ** 30, dest="train_text_encoder_epochs", help="Number of epochs to train the text encoder for")
+        parser.add_argument("--train-text-encoder", required=False, action='store_true', dest="text_encoder_train_switch", help="Whether the text encoder should be trained")
+        parser.add_argument("--train-text-encoder-epochs", type=int, required=False, default=2 ** 30, dest="text_encoder_max_train_epochs", help="Number of epochs to train the text encoder for")
         parser.add_argument("--text-encoder-learning-rate", type=float, required=False, default=None, dest="text_encoder_learning_rate", help="Learning rate for the text encoder")
         parser.add_argument("--text-encoder-layer-skip", type=int, required=False, default=0, dest="text_encoder_layer_skip", help="Skip last layers of the text encoder")
-        parser.add_argument("--train-unet", required=False, action='store_true', dest="train_unet", help="Whether the unet should be trained")
-        parser.add_argument("--train-unet-epochs", type=int, required=False, default=2 ** 30, dest="train_unet_epochs", help="Number of epochs to train the unet for")
+        parser.add_argument("--train-unet", required=False, action='store_true', dest="unet_train_switch", help="Whether the unet should be trained")
+        parser.add_argument("--train-unet-epochs", type=int, required=False, default=2 ** 30, dest="unet_max_train_epochs", help="Number of epochs to train the unet for")
         parser.add_argument("--unet-learning-rate", type=float, required=False, default=None, dest="unet_learning_rate", help="Learning rate for the unet")
         parser.add_argument("--offset-noise-weight", type=float, required=False, default=0.0, dest="offset_noise_weight", help="The weight for offset noise prediction")
         parser.add_argument("--rescale-noise-scheduler-to-zero-terminal-snr", required=False, action='store_true', dest="rescale_noise_scheduler_to_zero_terminal_snr", help="Rescales the noise sceduler to have a zero terminal signal to noise ratio, this also sets the model to v-prediction mode")
@@ -253,24 +253,13 @@ class TrainArgs(BaseArgs):
         args["clear_cache_before_training"] = True
 
         # training settings
-        args["optimizer"] = Optimizer.ADAMW
-        args["learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
-        args["learning_rate"] = 3e-6
-        args["learning_rate_warmup_steps"] = 200
-        args["learning_rate_cycles"] = 1
         args["epochs"] = 100
         args["batch_size"] = 1
         args["gradient_accumulation_steps"] = 1
         args["ema"] = EMAMode.OFF
         args["ema_decay"] = 0.999
         args["ema_update_step_interval"] = 5
-        args["train_text_encoder"] = True
-        args["train_text_encoder_epochs"] = 30
-        args["text_encoder_learning_rate"] = 3e-6
         args["text_encoder_layer_skip"] = 0
-        args["train_unet"] = True
-        args["train_unet_epochs"] = 10000
-        args["unet_learning_rate"] = 3e-6
         args["offset_noise_weight"] = 0.0
         args["rescale_noise_scheduler_to_zero_terminal_snr"] = False
         args["force_v_prediction"] = False
@@ -294,6 +283,7 @@ class TrainArgs(BaseArgs):
         args["attention_mechanism"] = AttentionMechanism.XFORMERS
         
         # optimizer settings
+        args["optimizer"] = Optimizer.ADAMW
         args["weight_decay"] = 1e-2
         args["momentum"] = 0.99
         args["dampening"] = 0
@@ -330,7 +320,41 @@ class TrainArgs(BaseArgs):
         args["relative_step"] = True
         args["warmup_init"] = False
         args["eps_tuple"] = (1e-30, 1e-3)
-
+        
+        # global scheduler settings
+        args["schedulers_advanced"] = False
+        args["global_train_switch"] = True
+        args["global_learning_rate"] = 3e-6
+        args["global_min_learning_rate"] = 0
+        args["global_num_cycles"] = 1
+        args["global_warmup_steps"] = 200
+        args["global_max_train_epochs"] = 10000
+        args["global_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        # unet scheduler settings
+        args["unet_train_switch"] = True
+        args["unet_learning_rate"] = 3e-6
+        args["unet_min_learning_rate"] = 0
+        args["unet_num_cycles"] = 1
+        args["unet_warmup_steps"] = 200
+        args["unet_max_train_epochs"] = 10000
+        args["unet_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        # TE scheduler settings
+        args["text_encoder_train_switch"] = True
+        args["text_encoder_learning_rate"] = 3e-6
+        args["text_encoder_min_learning_rate"] = 0
+        args["text_encoder_num_cycles"] = 1
+        args["text_encoder_warmup_steps"] = 200
+        args["text_encoder_max_train_epochs"] = 10000
+        args["text_encoder_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        # TE2 scheduler settings
+        args["text_encoder_2_train_switch"] = True
+        args["text_encoder_2_learning_rate"] = 3e-6
+        args["text_encoder_2_min_learning_rate"] = 0
+        args["text_encoder_2_num_cycles"] = 1
+        args["text_encoder_2_warmup_steps"] = 200
+        args["text_encoder_2_max_train_epochs"] = 10000
+        args["text_encoder_2_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT        
+        
         # sample settings
         args["sample_definition_file_name"] = "training_samples/samples.json"
         args["sample_after"] = 10

@@ -236,7 +236,7 @@ def create_optimizer(
         case Optimizer.SGD:
             optimizer = torch.optim.SGD(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 foreach=args.foreach,
             )
@@ -246,7 +246,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.SGD8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 momentum=args.momentum,
                 dampening=args.dampening,
                 weight_decay=args.weight_decay,
@@ -257,7 +257,7 @@ def create_optimizer(
         case Optimizer.ADAM:
             optimizer = torch.optim.Adam(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 foreach=args.foreach,
@@ -268,7 +268,7 @@ def create_optimizer(
         case Optimizer.ADAMW:
             optimizer = torch.optim.AdamW(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 foreach=args.foreach,
@@ -280,7 +280,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.Adam8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 min_8bit_size=args.min_8bit_size,
@@ -294,7 +294,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.AdamW8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 min_8bit_size=args.min_8bit_size,
@@ -308,7 +308,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.Adagrad(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 lr_decay=args.lr_decay,
@@ -320,7 +320,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.Adagrad8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 lr_decay=args.lr_decay,
@@ -335,7 +335,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.RMSprop(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 alpha=args.alpha,
@@ -348,7 +348,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.RMSprop8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 eps=args.eps,
                 alpha=args.alpha,
@@ -364,7 +364,7 @@ def create_optimizer(
             import lion_pytorch as lp
             optimizer = lp.Lion(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
             )
 
@@ -373,7 +373,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.LARS(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 momentum=args.momentum,
                 dampening=args.dampening,
@@ -386,7 +386,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.LARS8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 momentum=args.momentum,
                 dampening=args.dampening,
@@ -401,7 +401,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.LAMB(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 betas=args.betas,
                 bias_correction=args.bias_correction,
@@ -417,7 +417,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.LAMB8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 betas=args.betas,
                 bias_correction=args.bias_correction,
@@ -434,7 +434,7 @@ def create_optimizer(
             import bitsandbytes as bnb
             optimizer = bnb.optim.Lion8bit(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay,
                 betas=args.betas,
                 min_8bit_size=args.min_8bit_size,
@@ -448,7 +448,7 @@ def create_optimizer(
             import dadaptation as da
             optimizer = da.DAdaptSGD(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay
             )
 
@@ -457,7 +457,7 @@ def create_optimizer(
             import dadaptation as da
             optimizer = da.DAdaptAdam(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay
             )
 
@@ -466,7 +466,7 @@ def create_optimizer(
             import dadaptation as da
             optimizer = da.DAdaptAdan(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay
             )
 
@@ -475,7 +475,7 @@ def create_optimizer(
             import dadaptation as da
             optimizer = da.DAdaptAdaGrad(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay
             )
 
@@ -484,7 +484,7 @@ def create_optimizer(
             import dadaptation as da
             optimizer = da.DAdaptLion(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 weight_decay=args.weight_decay
             )
 
@@ -493,7 +493,7 @@ def create_optimizer(
             import prodigyopt
             optimizer = prodigyopt.Prodigy(
                 params=parameters,
-                lr=args.learning_rate,
+                lr=args.global_learning_rate,
                 betas=args.betas,
                 beta3=args.beta3,
                 eps=args.eps,
@@ -525,7 +525,7 @@ def create_optimizer(
             else:
                 optimizer = Adafactor(
                     params=parameters,
-                    lr=args.learning_rate,
+                    lr=args.global_learning_rate,
                     # eps=args.eps_tuple,
                     clip_threshold=args.clip_threshold,
                     decay_rate=args.decay_rate,
@@ -574,7 +574,7 @@ def create_ema(
 
 def create_lr_scheduler(
         optimizer: torch.optim.Optimizer,
-        learning_rate_scheduler: LearningRateScheduler,
+        global_learning_rate_scheduler: LearningRateScheduler,
         warmup_steps: int,
         num_cycles: float,
         num_epochs: int,
@@ -582,47 +582,47 @@ def create_lr_scheduler(
         approximate_epoch_length: int,
         gradient_accumulation_steps: int,
         global_step: int = 0,
+        min_lr: float = 0,
+        reverse_scheduler: bool = False,
 ) -> LRScheduler:
     steps_per_epoch = approximate_epoch_length / batch_size
     total_steps = int(steps_per_epoch * num_epochs / gradient_accumulation_steps)
     warmup_steps = int(warmup_steps / gradient_accumulation_steps)
     scheduler_steps = total_steps - warmup_steps
 
-    match learning_rate_scheduler:
+    match global_learning_rate_scheduler:
         case LearningRateScheduler.CONSTANT:
             lr_lambda = lr_lambda_constant()
-        case LearningRateScheduler.COSINE_DOWN:
-            lr_lambda = lr_lambda_cosine_down(scheduler_steps, num_cycles)
-        case LearningRateScheduler.COSINE_UP:
-            lr_lambda = lr_lambda_cosine_up(scheduler_steps, num_cycles)
+        case LearningRateScheduler.COSINE:
+            lr_lambda = lr_lambda_cosine(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.COSINE_WITH_HARD_RESTARTS:
-            lr_lambda = lr_lambda_cosine_with_hard_restarts(scheduler_steps, num_cycles)
+            lr_lambda = lr_lambda_cosine_with_hard_restarts(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.REX:
-            lr_lambda = lr_rex(scheduler_steps, num_cycles)
+            lr_lambda = lr_rex(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.TRIANGLE:
-            lr_lambda = lr_triangle(scheduler_steps, num_cycles)
+            lr_lambda = lr_triangle(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.RAMP:
-            lr_lambda = lr_ramp(scheduler_steps, num_cycles)
+            lr_lambda = lr_ramp(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.SAWTOOTH:
-            lr_lambda = lr_sawtooth(scheduler_steps, num_cycles)
+            lr_lambda = lr_sawtooth(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.SQUARE:
-            lr_lambda = lr_square(scheduler_steps, num_cycles)
+            lr_lambda = lr_square(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.PULSE:
-            lr_lambda = lr_pulse(scheduler_steps, num_cycles)
+            lr_lambda = lr_pulse(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.ROUNDED_PULSE:
-            lr_lambda = lr_rounded_pulse(scheduler_steps, num_cycles)
+            lr_lambda = lr_rounded_pulse(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.TRIANGLE_PULSE:
-            lr_lambda = lr_triangle_pulse(scheduler_steps, num_cycles)
+            lr_lambda = lr_triangle_pulse(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.RAMP_PULSE:
-            lr_lambda = lr_ramp_pulse(scheduler_steps, num_cycles)
+            lr_lambda = lr_ramp_pulse(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.SAWTOOTH_PULSE:
-            lr_lambda = lr_sawtooth_pulse(scheduler_steps, num_cycles)
+            lr_lambda = lr_sawtooth_pulse(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.SINE_CUBED:
-            lr_lambda = lr_sine_cubed(scheduler_steps, num_cycles)
+            lr_lambda = lr_sine_cubed(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.FLAME:
-            lr_lambda = lr_flame(scheduler_steps, num_cycles)
+            lr_lambda = lr_flame(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case LearningRateScheduler.SEMICIRCLE:
-            lr_lambda = lr_semicircle(scheduler_steps, num_cycles)
+            lr_lambda = lr_semicircle(scheduler_steps, num_cycles, min_lr, reverse_scheduler)
         case _:
             lr_lambda = lr_lambda_constant()
 
