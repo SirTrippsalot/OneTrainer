@@ -152,6 +152,26 @@ class SchedulerParamsWindow(ctk.CTkToplevel):
             'SEMICIRCLE': lr_semicircle(points_of_accuracy, num_cycles, MINLR, reverse=False)
         }
         return schedulers.get(scheduler_name)
+        
+    def create_ui_component(self, master, row, col, subitem, arg_info, ui_state, LearningRateScheduler):
+        thisArg = f"{subitem}_{arg_info['arg-suffix']}"
+        title = ""
+        if arg_info['title'] == 'Train Switch':
+            title = f"Train {subitem.replace('_', ' ').title()}"
+        else:
+            title = f"{subitem.replace('_', ' ').title().replace('Text Encoder', 'TE')} {arg_info['title']}"
+
+        tooltip = arg_info['tooltip']
+        type = arg_info['type']
+        components.label(master, row, col, title, tooltip=tooltip)
+
+        if arg_info['arg-suffix'] == "learning_rate_scheduler":
+            components.options(master, row, col+1, [str(x) for x in list(LearningRateScheduler)], ui_state, thisArg)
+        elif type != 'boolean':
+            components.entry(master, row, col+1, ui_state, thisArg)
+        else:
+            components.switch(master, row, col+1, ui_state, thisArg)
+
 
     def create_dynamic_ui(self, master, components, ui_state):
         advanced = self.ui_state.vars['schedulers_advanced'].get()
@@ -213,40 +233,34 @@ class SchedulerParamsWindow(ctk.CTkToplevel):
 
 
         if advanced:
-            subitems = self.MODEL_MAP[model]
-            
-            col = 0  # Initialize the column index
+            subitems = self.MODEL_MAP[model]  
+            col = 0 
             for subitem in subitems:
                 parts = PART_MAP[subitem]
-                
-                row = 1  # Reset the row index for each subitem
+                row = 1 
                 for part in parts:
                     arg_info = KEY_DETAIL_MAP[part]
-                    
-                    # Create a magical key!
-                    thisArg = f"{subitem}_{arg_info['arg-suffix']}"
-                    if arg_info['title'] == 'Train Switch':
-                        title = f"Train {subitem.replace('_', ' ').title()}"
-                    else:
-                        title = f"{subitem.replace('_', ' ').title().replace('Text Encoder', 'TE')} {arg_info['title']}"
-
-                    tooltip = arg_info['tooltip']
-                    type = arg_info['type']
-                    
-                    # Place the components into the UI realm
-                    components.label(master, row, col, title, tooltip=tooltip)
-                    if arg_info['arg-suffix'] == "learning_rate_scheduler":
-                        components.options(master, row, col+1, [str(x) for x in list(LearningRateScheduler)], ui_state, thisArg)
-                    elif type != 'boolean':
-                        components.entry(master, row, col+1, ui_state, thisArg)
-                    else:
-                        components.switch(master, row, col+1, ui_state, thisArg)
-                    
-                    row += 1  # Move on to the next row, let the magic flow!
-
-                col += 3  # Ah, onto the next column of wonders!
+                    self.create_ui_component(master, row, col, subitem, arg_info, ui_state, LearningRateScheduler)
+                    row += 1
+                col += 3 
         else:
-            print("Basic UI")
+            col, row = 0, 1
+            subitems = self.MODEL_MAP[model]  
+            for subitem in subitems:
+                parts = PART_MAP[subitem]
+                part = PART_MAP[subitem][0]
+                arg_info = KEY_DETAIL_MAP[part]
+                self.create_ui_component(master, row, col, subitem, arg_info, ui_state, LearningRateScheduler)
+                row += 1
+            row = 1
+            col = 3
+            if "global" in PART_MAP:
+                subitem = "global"
+                parts = PART_MAP[subitem]
+                for part in parts:
+                    arg_info = KEY_DETAIL_MAP[part]
+                    self.create_ui_component(master, row, col, subitem, arg_info, ui_state, LearningRateScheduler)
+                    row += 1
 
         
     def main_frame(self, master):
