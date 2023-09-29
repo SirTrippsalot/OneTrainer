@@ -32,11 +32,13 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
         params = list()
 
         if args.text_encoder_train_switch:
-            params += list(model.text_encoder_1_lora.parameters())
-            params += list(model.text_encoder_2_lora.parameters())
+            params += list(model.text_encoder_1.parameters())
+            
+        if args.text_encoder_2_train_switch:
+            params += list(model.text_encoder_2.parameters())
 
         if args.unet_train_switch:
-            params += list(model.unet_lora.parameters())
+            params += list(model.unet.parameters())
 
         return params
 
@@ -48,25 +50,31 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
         param_groups = list()
 
         if args.text_encoder_train_switch:
-            lr = args.text_encoder_learning_rate if args.text_encoder_learning_rate is not None else args.global_learning_rate
+            lr = args.text_encoder_learning_rate if args.schedulers_advanced else args.global_learning_rate
             param_groups.append({
-                'params': model.text_encoder_1_lora.parameters(),
+                'params': model.text_encoder_1.parameters(),
                 'lr': lr,
                 'initial_lr': lr,
             })
+            print("loaded TE")
+        
+        if args.text_encoder_2_train_switch:
+            lr = args.text_encoder_2_learning_rate if args.schedulers_advanced else args.global_learning_rate
             param_groups.append({
-                'params': model.text_encoder_2_lora.parameters(),
+                'params': model.text_encoder_2.parameters(),
                 'lr': lr,
                 'initial_lr': lr,
             })
+            print("loaded TE2")
 
         if args.unet_train_switch:
-            lr = args.unet_learning_rate if args.unet_learning_rate is not None else args.global_learning_rate
+            lr = args.unet_learning_rate if args.schedulers_advanced else args.global_learning_rate
             param_groups.append({
-                'params': model.unet_lora.parameters(),
+                'params': model.unet.parameters(),
                 'lr': lr,
                 'initial_lr': lr,
             })
+            print("loaded UNET")
 
         return param_groups
 
@@ -80,7 +88,7 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
                 model.text_encoder_1, args.lora_rank, "lora_te1", args.lora_alpha
             )
 
-        if model.text_encoder_2_lora is None and args.text_encoder_train_switch:
+        if model.text_encoder_2_lora is None and args.text_encoder_2_train_switch:
             model.text_encoder_2_lora = LoRAModuleWrapper(
                 model.text_encoder_2, args.lora_rank, "lora_te2", args.lora_alpha
             )
@@ -96,6 +104,8 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
         model.vae.requires_grad_(False)
 
         text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        text_encoder_train_switch = args.text_encoder_2_train_switch and (model.train_progress.epoch < args.text_encoder_2_max_train_epochs)
+        
         if model.text_encoder_1_lora is not None:
             model.text_encoder_1_lora.requires_grad_(text_encoder_train_switch)
         if model.text_encoder_2_lora is not None:
@@ -160,25 +170,29 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
             args: TrainArgs,
     ):
         model.text_encoder_1.to(self.train_device if args.text_encoder_train_switch else self.temp_device)
-        model.text_encoder_2.to(self.train_device if args.text_encoder_train_switch else self.temp_device)
+        model.text_encoder_2.to(self.train_device if args.text_encoder_2_train_switch else self.temp_device)
         model.vae.to(self.temp_device)
         model.unet.to(self.train_device)
 
         if model.text_encoder_1_lora is not None and args.text_encoder_train_switch:
             model.text_encoder_1_lora.to(self.train_device)
 
-        if model.text_encoder_2_lora is not None and args.text_encoder_train_switch:
+        if model.text_encoder_2_lora is not None and args.text_encoder_2_train_switch:
             model.text_encoder_2_lora.to(self.train_device)
 
         if model.unet_lora is not None:
             model.unet_lora.to(self.train_device)
 
         if args.text_encoder_train_switch:
-            model.text_encoder_1.train()
             model.text_encoder_2.train()
         else:
             model.text_encoder_1.eval()
+            
+        if args.text_encoder_2_train_switch:
+            model.text_encoder_2.train()
+        else:
             model.text_encoder_2.eval()
+            
         model.vae.eval()
         if args.unet_train_switch:
             model.unet.train()
@@ -192,10 +206,11 @@ class StableDiffusionXLLoRASetup(BaseStableDiffusionXLSetup):
             train_progress: TrainProgress
     ):
         text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        text_encoder_2_train_switch = args.text_encoder_2_train_switch and (model.train_progress.epoch < args.text_encoder_2_max_train_epochs)
         if model.text_encoder_1_lora is not None:
             model.text_encoder_1_lora.requires_grad_(text_encoder_train_switch)
         if model.text_encoder_2_lora is not None:
-            model.text_encoder_2_lora.requires_grad_(text_encoder_train_switch)
+            model.text_encoder_2_lora.requires_grad_(text_encoder_2_train_switch)
 
         unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
         if model.unet_lora is not None:

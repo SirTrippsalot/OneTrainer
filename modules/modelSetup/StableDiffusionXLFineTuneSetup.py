@@ -85,7 +85,7 @@ class StableDiffusionXLFineTuneSetup(BaseStableDiffusionXLSetup):
         text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
         model.text_encoder_1.requires_grad_(False)
 
-        text_encoder_train_switch = args.text_encoder_train_switch and (model.train_progress.epoch < args.text_encoder_max_train_epochs)
+        text_encoder_train_switch = args.text_encoder_2_train_switch and (model.train_progress.epoch < args.text_encoder_2_max_train_epochs)
         model.text_encoder_2.requires_grad_(text_encoder_train_switch)
 
         unet_train_switch = args.unet_train_switch and (model.train_progress.epoch < args.unet_max_train_epochs)
