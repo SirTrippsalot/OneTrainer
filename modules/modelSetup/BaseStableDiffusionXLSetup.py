@@ -264,6 +264,7 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
         predicted = data['predicted']
         target = data['target']
         timesteps = data['timesteps']
+        batch_size = predicted.shape[0]
         
         #Defining Stregths to facilitate UI integration
         mse_strength = 0.5
@@ -310,11 +311,17 @@ class BaseStableDiffusionXLSetup(BaseModelSetup, metaclass=ABCMeta):
                 cosine_sim_losses = cosine_sim_losses.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
             
             #Set Losses Strength (Should probably sum to 1)
+            # losses = (
+                # mse_strength * mse_losses +          
+                # mae_strength * mae_losses + 
+                # cosine_strength * cosine_sim_losses
+            # ).mean([1, 2, 3])
+            
+            # crazy scaled loss
             losses = (
                 mse_strength * mse_losses +          
-                mae_strength * mae_losses + 
-                cosine_strength * cosine_sim_losses
-            ).mean([1, 2, 3])
+                mae_strength * mae_losses
+            ) * (1+cosine_sim_losses) * batch_size
             
             # if model.noise_scheduler.config.prediction_type == 'v_prediction':            
                 # if 1 == 0: # args.min_snr_gamma:
