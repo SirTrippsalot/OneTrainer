@@ -22,6 +22,7 @@ class TrainArgs(BaseArgs):
     workspace_dir: str
     cache_dir: str
     tensorboard: bool
+    continue_last_backup: bool
 
     # model settings
     base_model_name: str
@@ -33,6 +34,7 @@ class TrainArgs(BaseArgs):
     output_dtype: DataType
     output_model_format: ModelFormat
     output_model_destination: str
+    gradient_checkpointing: bool
 
     # data settings
     concept_file_name: str
@@ -64,6 +66,7 @@ class TrainArgs(BaseArgs):
     unet_max_train_epochs: int
     unet_learning_rate: float
     offset_noise_weight: float
+    perturbation_noise_weight: float
     rescale_noise_scheduler_to_zero_terminal_snr: bool
     force_v_prediction: bool
     force_epsilon_prediction: bool
@@ -94,6 +97,8 @@ class TrainArgs(BaseArgs):
     # backup settings
     backup_after: float
     backup_after_unit: TimeUnit
+    rolling_backup: bool
+    rolling_backup_count: int
     backup_before_save: bool
     save_after: float
     save_after_unit: TimeUnit
@@ -140,6 +145,7 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--workspace-dir", type=str, required=True, dest="workspace_dir", help="directory to use as a workspace")
         parser.add_argument("--cache-dir", type=str, required=True, dest="cache_dir", help="The directory used for caching")
         parser.add_argument("--tensorboard", required=False, action='store_true', dest="tensorboard", help="Start a tensorboard interface during training. The web server will run on port 6006")
+        parser.add_argument("--continue-last-backup", required=False, action='store_true', dest="continue_last_backup", help="Continues training from the last backup in <workspace>/run/backup")
 
         # model settings
         parser.add_argument("--base-model-name", type=str, required=True, dest="base_model_name", help="The base model to start training from")
@@ -151,6 +157,7 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--output-dtype", type=DataType, required=True, dest="output_dtype", help="The data type to use for saving weights", choices=list(DataType))
         parser.add_argument("--output-model-format", type=ModelFormat, required=False, default=ModelFormat.SAFETENSORS, dest="output_model_format", help="The format to save the final output model", choices=list(ModelFormat))
         parser.add_argument("--output-model-destination", type=str, required=True, dest="output_model_destination", help="The destination to save the final output model")
+        parser.add_argument("--gradient-checkpointing", required=False, action='store_true', dest="gradient_checkpointing", help="Enable gradient checkpointing to reduce memory usage")
 
         # data settings
         parser.add_argument("--concept-file-name", type=str, required=True, dest="concept_file_name", help="The json file containing the concept definition")
@@ -182,6 +189,7 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--train-unet-epochs", type=int, required=False, default=2 ** 30, dest="unet_max_train_epochs", help="Number of epochs to train the unet for")
         parser.add_argument("--unet-learning-rate", type=float, required=False, default=None, dest="unet_learning_rate", help="Learning rate for the unet")
         parser.add_argument("--offset-noise-weight", type=float, required=False, default=0.0, dest="offset_noise_weight", help="The weight for offset noise prediction")
+        parser.add_argument("--perturbation-noise-weight", type=float, required=False, default=0.0, dest="perturbation_noise_weight", help="The weight for perturbation noise")
         parser.add_argument("--rescale-noise-scheduler-to-zero-terminal-snr", required=False, action='store_true', dest="rescale_noise_scheduler_to_zero_terminal_snr", help="Rescales the noise sceduler to have a zero terminal signal to noise ratio, this also sets the model to v-prediction mode")
         parser.add_argument("--force-v-prediction", required=False, action='store_true', dest="force_v_prediction", help="Forces the training to use v-prediction")
         parser.add_argument("--force-epsilon-prediction", required=False, action='store_true', dest="force_epsilon_prediction", help="Forces the training to use epsilon-prediction")
@@ -212,6 +220,8 @@ class TrainArgs(BaseArgs):
         # backup settings
         parser.add_argument("--backup-after", type=float, required=True, dest="backup_after", help="The interval for backups")
         parser.add_argument("--backup-after-unit", type=TimeUnit, required=True, dest="backup_after_unit", help="The unit applied to the backup-after option")
+        parser.add_argument("--rolling-backup", required=False, action='store_true', dest="rolling_backup", help="Enable rolling backups")
+        parser.add_argument("--rolling-backup-count", type=int, required=False, default=3, dest="rolling_backup_count", help="The number of backups to keep if rolling backups are enabled")
         parser.add_argument("--backup-before-save", required=False, action='store_true', dest="backup_before_save", help="Create a backup before saving the final model")
         parser.add_argument("--save-after", type=float, required=False, default=0, dest="save_after", help="The interval for backups")
         parser.add_argument("--save-after-unit", type=TimeUnit, required=False, default=TimeUnit.NEVER, dest="save_after_unit", help="The unit applied to the backup-after option")
@@ -231,6 +241,7 @@ class TrainArgs(BaseArgs):
         args["workspace_dir"] = "workspace/run"
         args["cache_dir"] = "workspace-cache/run"
         args["tensorboard"] = True
+        args["continue_last_backup"] = False
 
         # model settings
         args["base_model_name"] = "runwayml/stable-diffusion-v1-5"
@@ -242,6 +253,7 @@ class TrainArgs(BaseArgs):
         args["output_dtype"] = DataType.FLOAT_32
         args["output_model_format"] = ModelFormat.SAFETENSORS
         args["output_model_destination"] = "models/model.safetensors"
+        args["gradient_checkpointing"] = True
 
         # data settings
         args["concept_file_name"] = "training_concepts/concepts.json"
@@ -261,6 +273,7 @@ class TrainArgs(BaseArgs):
         args["ema_update_step_interval"] = 5
         args["text_encoder_layer_skip"] = 0
         args["offset_noise_weight"] = 0.0
+        args["perturbation_noise_weight"] = 0.0
         args["rescale_noise_scheduler_to_zero_terminal_snr"] = False
         args["force_v_prediction"] = False
         args["force_epsilon_prediction"] = False
@@ -364,6 +377,8 @@ class TrainArgs(BaseArgs):
         # backup settings
         args["backup_after"] = 30
         args["backup_after_unit"] = TimeUnit.MINUTE
+        args["rolling_backup"] = False
+        args["rolling_backup_count"] = 3
         args["backup_before_save"] = True
         args["save_after"] = 0
         args["save_after_unit"] = TimeUnit.NEVER

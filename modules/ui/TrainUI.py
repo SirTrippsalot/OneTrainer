@@ -143,23 +143,28 @@ class TrainUI(ctk.CTk):
                          tooltip="The directory where cached data is saved")
         components.dir_entry(master, 1, 1, self.ui_state, "cache_dir")
 
+        # continue from previous backup
+        components.label(master, 2, 0, "Continue from last backup",
+                         tooltip="Automatically continues training from the last backup saved in <workspace>/run/backup")
+        components.switch(master, 2, 1, self.ui_state, "continue_last_backup")
+
         # only cache
-        components.label(master, 2, 0, "Only Cache",
+        components.label(master, 3, 0, "Only Cache",
                          tooltip="Only populate the cache, without any training")
-        components.switch(master, 2, 1, self.ui_state, "only_cache")
+        components.switch(master, 3, 1, self.ui_state, "only_cache")
 
         # debug
-        components.label(master, 3, 0, "Debug mode",
+        components.label(master, 4, 0, "Debug mode",
                          tooltip="Save debug information during the training into the debug directory")
-        components.switch(master, 3, 1, self.ui_state, "debug_mode")
+        components.switch(master, 4, 1, self.ui_state, "debug_mode")
 
-        components.label(master, 4, 0, "Debug Directory",
+        components.label(master, 5, 0, "Debug Directory",
                          tooltip="The directory where debug data is saved")
-        components.dir_entry(master, 4, 1, self.ui_state, "debug_dir")
+        components.dir_entry(master, 5, 1, self.ui_state, "debug_dir")
 
-        components.label(master, 5, 0, "Tensorboard",
+        components.label(master, 6, 0, "Tensorboard",
                          tooltip="Starts the Tensorboard Web UI during training")
-        components.switch(master, 5, 1, self.ui_state, "tensorboard")
+        components.switch(master, 6, 1, self.ui_state, "tensorboard")
 
     def model_tab(self, master):
         master.grid_columnconfigure(0, weight=0)
@@ -399,15 +404,25 @@ class TrainUI(ctk.CTk):
                          tooltip="The weight of offset noise added to each training step")
         components.entry(scroll_frame, 5, 4, self.ui_state, "offset_noise_weight")
 
+        # perturbation noise weight
+        components.label(scroll_frame, 6, 3, "Perturbation Noise Weight",
+                         tooltip="The weight of perturbation noise added to each training step")
+        components.entry(scroll_frame, 6, 4, self.ui_state, "perturbation_noise_weight")
+
+        # gradient checkpointing
+        components.label(scroll_frame, 7, 3, "Gradient checkpointing",
+                         tooltip="Enables gradient checkpointing. This reduces memory usage, but increases training time")
+        components.switch(scroll_frame, 7, 4, self.ui_state, "gradient_checkpointing")
+
         # rescale noise scheduler to zero terminal SNR
-        components.label(scroll_frame, 6, 3, "Rescale Noise Scheduler",
+        components.label(scroll_frame, 8, 3, "Rescale Noise Scheduler",
                          tooltip="Rescales the noise scheduler to a zero terminal signal to noise ratio and switches the model to a v-prediction target")
-        components.switch(scroll_frame, 6, 4, self.ui_state, "rescale_noise_scheduler_to_zero_terminal_snr")
+        components.switch(scroll_frame, 8, 4, self.ui_state, "rescale_noise_scheduler_to_zero_terminal_snr")
 
         # train dtype
-        components.label(scroll_frame, 7, 3, "Train Data Type",
+        components.label(scroll_frame, 9, 3, "Train Data Type",
                          tooltip="The mixed precision data type used for training. This can increase training speed, but reduces precision")
-        components.options_kv(scroll_frame, 7, 4, [
+        components.options_kv(scroll_frame, 9, 4, [
             ("float32", DataType.FLOAT_32),
             ("float16", DataType.FLOAT_16),
             ("bfloat16", DataType.BFLOAT_16),
@@ -415,9 +430,9 @@ class TrainUI(ctk.CTk):
         ], self.ui_state, "train_dtype")
 
         # resolution
-        components.label(scroll_frame, 8, 3, "Resolution",
+        components.label(scroll_frame, 10, 3, "Resolution",
                          tooltip="The resolution used for training")
-        components.entry(scroll_frame, 8, 4, self.ui_state, "resolution")
+        components.entry(scroll_frame, 10, 4, self.ui_state, "resolution")
 
         # column 3
         # train unet
@@ -502,15 +517,25 @@ class TrainUI(ctk.CTk):
                          tooltip="The interval used when automatically creating model backups during training")
         components.time_entry(master, 0, 1, self.ui_state, "backup_after", "backup_after_unit")
 
+        # rolling backup
+        components.label(master, 1, 0, "Rolling Backup",
+                         tooltip="If rolling backups are enabled, older backups are deleted automatically")
+        components.switch(master, 1, 1, self.ui_state, "rolling_backup")
+
+        # rolling backup count
+        components.label(master, 1, 3, "Rolling Backup Count",
+                         tooltip="Defines the number of backups to keep if rolling backups are enabled")
+        components.entry(master, 1, 4, self.ui_state, "rolling_backup_count")
+
         # backup before save
-        components.label(master, 1, 0, "Backup Before Save",
+        components.label(master, 2, 0, "Backup Before Save",
                          tooltip="Create a full backup before saving the final model")
-        components.switch(master, 1, 1, self.ui_state, "backup_before_save")
+        components.switch(master, 2, 1, self.ui_state, "backup_before_save")
 
         # save after
-        components.label(master, 2, 0, "Save After",
+        components.label(master, 3, 0, "Save After",
                          tooltip="The interval used when automatically saving the model during training")
-        components.time_entry(master, 2, 1, self.ui_state, "save_after", "save_after_unit")
+        components.time_entry(master, 3, 1, self.ui_state, "save_after", "save_after_unit")
 
     def lora_tab(self, master):
         master.grid_columnconfigure(0, weight=0)

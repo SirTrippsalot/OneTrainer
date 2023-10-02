@@ -36,6 +36,7 @@ from modules.util.dtype_util import allow_mixed_precision
 from modules.util.enum.ImageFormat import ImageFormat
 from modules.util.enum.ModelFormat import ModelFormat
 from modules.util.enum.TimeUnit import TimeUnit
+from modules.util.enum.TrainingMethod import TrainingMethod
 from modules.util.params.SampleParams import SampleParams
 
 
@@ -90,11 +91,29 @@ class GenericTrainer(BaseTrainer):
 
         self.callbacks.on_update_status("loading the model")
 
+        base_model_name = self.args.base_model_name
+        extra_model_name = self.args.extra_model_name
+
+        if self.args.continue_last_backup:
+            self.callbacks.on_update_status("searching for previous backups")
+            last_backup_path = self.__get_last_backup_dirpath()
+
+            if last_backup_path:
+                if self.args.training_method in [TrainingMethod.LORA, TrainingMethod.EMBEDDING]:
+                    extra_model_name = last_backup_path
+                else:  # fine-tunes
+                    base_model_name = last_backup_path
+
+                print(f"Continuing training from backup '{last_backup_path}'...")
+            else:
+                print(f"No backup found, continuing without backup...")
+
+        self.callbacks.on_update_status("loading the model")
         self.model = self.model_loader.load(
             model_type=self.args.model_type,
             weight_dtypes=self.args.weight_dtypes(),
-            base_model_name=self.args.base_model_name,
-            extra_model_name=self.args.extra_model_name,
+            base_model_name=base_model_name,
+            extra_model_name=extra_model_name,
         )
 
         self.callbacks.on_update_status("running model setup")
@@ -135,6 +154,39 @@ class GenericTrainer(BaseTrainer):
                 path = os.path.join(self.args.cache_dir, filename)
                 if os.path.isdir(path) and filename.startswith('epoch-'):
                     shutil.rmtree(path)
+
+    def __get_last_backup_dirpath(self):
+        backup_dirpath = os.path.join(self.args.workspace_dir, "backup")
+        if os.path.exists(backup_dirpath):
+            backup_directories = sorted(
+                [dirpath for dirpath in os.listdir(backup_dirpath) if
+                 os.path.isdir(os.path.join(backup_dirpath, dirpath))],
+                reverse=True,
+            )
+
+            if backup_directories:
+                last_backup_dirpath = backup_directories[0]
+                return os.path.join(backup_dirpath, last_backup_dirpath)
+
+        return None
+
+    def __prune_backups(self, backups_to_keep: int):
+        backup_dirpath = os.path.join(self.args.workspace_dir, "backup")
+        if os.path.exists(backup_dirpath):
+            backup_directories = sorted(
+                [dirpath for dirpath in os.listdir(backup_dirpath) if
+                 os.path.isdir(os.path.join(backup_dirpath, dirpath))],
+                reverse=True,
+            )
+
+            for dirpath in backup_directories[backups_to_keep:]:
+                dirpath = os.path.join(backup_dirpath, dirpath)
+                try:
+                    shutil.rmtree(dirpath)
+                except Exception as e:
+                    print(f"Could not delete old rolling backup {dirpath}")
+
+        return None
 
     def __enqueue_sample_during_training(self, fun: Callable):
         self.sample_queue.append(fun)
@@ -278,6 +330,9 @@ class GenericTrainer(BaseTrainer):
                 traceback.print_exc()
                 print("Could not delete partial backup")
                 pass
+        finally:
+            if self.args.rolling_backup:
+                self.__prune_backups(self.args.rolling_backup_count)
 
         self.model_setup.setup_train_device(self.model, self.args)
 
