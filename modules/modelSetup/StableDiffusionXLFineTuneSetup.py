@@ -132,8 +132,8 @@ class StableDiffusionXLFineTuneSetup(BaseStableDiffusionXLSetup):
             model: StableDiffusionXLModel,
             args: TrainArgs,
     ):
-        model.text_encoder_1.to(self.train_device if args.text_encoder_train_switch else self.temp_device)
-        model.text_encoder_2.to(self.train_device if args.text_encoder_2_train_switch else self.temp_device)
+        model.text_encoder_1.to(self.train_device)
+        model.text_encoder_2.to(self.train_device)
         model.vae.to(self.temp_device)
         model.unet.to(self.train_device)
 
