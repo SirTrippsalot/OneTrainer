@@ -144,6 +144,8 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
                 'predicted': predicted_latent_noise,
                 'target': latent_noise,
                 'timesteps': timestep,
+                'latents': scaled_latent_image,
+                'noisy_latents': latent_input,
             }
         elif model.noise_scheduler.config.prediction_type == 'v_prediction':
             target_velocity = model.noise_scheduler.get_velocity(scaled_latent_image, latent_noise, timestep)
@@ -151,6 +153,8 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
                 'predicted': predicted_latent_noise,
                 'target': target_velocity,
                 'timesteps': timestep,
+                'latents': scaled_latent_image,
+                'noisy_latents': latent_input,
             }
 
         if args.debug_mode:
@@ -207,10 +211,18 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
 
         return model_output_data
 
-    def get_snr_scale(self, timesteps):
-        capped_snr = torch.clamp(torch.stack([self.noise_scheduler.all_snr[t] for t in timesteps]), max=1000)
-        scale = capped_snr / (capped_snr + 1)
-        return scale
+    def apply_snr_weight(self, loss, noisy_latents, latents, gamma):
+        gamma = gamma
+        if gamma:
+            sigma = torch.sub(noisy_latents, latents)
+            zeros = torch.zeros_like(sigma) 
+            alpha_mean_sq = torch.nn.functional.mse_loss(latents.float(), zeros.float(), reduction="none").mean([1, 2, 3])
+            sigma_mean_sq = torch.nn.functional.mse_loss(sigma.float(), zeros.float(), reduction="none").mean([1, 2, 3])
+            snr = torch.div(alpha_mean_sq, sigma_mean_sq)
+            gamma_over_snr = torch.div(torch.ones_like(snr) * gamma, snr)
+            snr_weight = torch.minimum(gamma_over_snr, torch.ones_like(gamma_over_snr)).float()
+            loss = loss * snr_weight
+        return loss
               
     def apply_snr_weight_to_loss(self, loss, timesteps, gamma):
         snr_values = torch.stack([self.noise_scheduler.all_snr[t] for t in timesteps])
@@ -239,6 +251,8 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
         predicted = data['predicted']
         target = data['target']
         timesteps = data['timesteps']
+        latents = data['latents']
+        noisy_latents = data['noisy_latents']
         batch_size = predicted.shape[0]
         
         #Defining Stregths to facilitate UI integration
@@ -266,7 +280,7 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
                     predicted,
                     target,
                     reduction='none'
-                ).mean([1, 2, 3])
+                )
             
             #MAE/L1 Loss
             if mae_strength != 0:
@@ -274,7 +288,7 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
                     predicted, 
                     target, 
                     reduction='none'
-                ).mean([1, 2, 3])
+                )
             
             #Cosine similarity loss
             if cosine_strength != 0:
@@ -286,17 +300,17 @@ class BaseStableDiffusionXLSetup(BaseDiffusionModelSetup, metaclass=ABCMeta):
                 cosine_sim_losses = cosine_sim_losses.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
             
             #Set Losses Strength (Should probably sum to 1)
-            # losses = (
-                # mse_strength * mse_losses +          
-                # mae_strength * mae_losses + 
-                # cosine_strength * cosine_sim_losses
-            # ).mean([1, 2, 3])
-            
-            # crazy scaled loss
             losses = (
                 mse_strength * mse_losses +          
                 mae_strength * mae_losses
-            ) * (1+cosine_sim_losses) * batch_size
+            ).mean([1, 2, 3])
+            # losses = self.apply_snr_weight(losses, noisy_latents, latents, 5)
+            losses = losses * batch_size
+            # crazy scaled loss
+            # losses = (
+                # mse_strength * mse_losses +          
+                # mae_strength * mae_losses
+            # ) * (1+cosine_sim_losses) * batch_size
             
             # if model.noise_scheduler.config.prediction_type == 'v_prediction':            
                 # if 1 == 0: # args.min_snr_gamma:
