@@ -13,6 +13,7 @@ from modules.trainer.GenericTrainer import GenericTrainer
 from modules.ui.CaptionUI import CaptionUI
 from modules.ui.ConceptTab import ConceptTab
 from modules.ui.ConvertModelUI import ConvertModelUI
+from modules.ui.OptimizerParamsWindow import OptimizerParamsWindow
 from modules.ui.SampleWindow import SampleWindow
 from modules.ui.LossParamsWindow import LossParamsWindow
 from modules.ui.OptimizerParamsWindow import OptimizerParamsWindow
@@ -20,6 +21,7 @@ from modules.ui.SchedulerParamsWindow import SchedulerParamsWindow
 from modules.ui.SamplingTab import SamplingTab
 from modules.ui.TopBar import TopBar
 from modules.util.TrainProgress import TrainProgress
+from modules.util.optimizer_util import UserPreferenceUtility, OPTIMIZER_KEY_MAP
 from modules.util.args.TrainArgs import TrainArgs
 from modules.util.callbacks.TrainCallbacks import TrainCallbacks
 from modules.util.commands.TrainCommands import TrainCommands
@@ -318,8 +320,9 @@ class TrainUI(ctk.CTk):
         # optimizer
         components.label(scroll_frame, 0, 0, "Optimizer",
                          tooltip="The type of optimizer")
-        components.options_adv(scroll_frame, 0, 1, [str(x) for x in list(Optimizer)], self.ui_state, "optimizer", self.open_optimizer_params_window)
-        
+        components.options_adv(scroll_frame, 0, 1, [str(x) for x in list(Optimizer)], self.ui_state, "optimizer",
+                               command=self.restore_optimizer_prefs, adv_command=self.open_optimizer_params_window)
+
         # learning rate scheduler
         components.label(scroll_frame, 1, 0, "Learning Rate Scheduler",
                          tooltip="Learning rate scheduler that automatically changes the learning rate during training")
@@ -660,12 +663,24 @@ class TrainUI(ctk.CTk):
         window = ConvertModelUI(self)
         self.wait_window(window)
 
-    def open_scheduler_params_window(self):
-        window = SchedulerParamsWindow(self, self.ui_state)
-        self.wait_window(window)
-
     def open_optimizer_params_window(self):
         window = OptimizerParamsWindow(self, self.ui_state)
+        self.wait_window(window)
+
+    def restore_optimizer_prefs(self, optimizer):
+        pref_util = UserPreferenceUtility()
+        user_prefs = pref_util.load_preferences(optimizer)
+
+        for key, default_value in OPTIMIZER_KEY_MAP[optimizer].items():
+            if user_prefs == "Use_Default":
+                value_to_set = default_value
+            else:
+                value_to_set = user_prefs.get(key, default_value)
+
+            self.ui_state.vars[key].set(value_to_set)
+
+    def open_scheduler_params_window(self):
+        window = SchedulerParamsWindow(self, self.ui_state)
         self.wait_window(window)
 
     def open_loss_params_window(self):

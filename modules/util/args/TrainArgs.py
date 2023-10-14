@@ -1,4 +1,5 @@
 import argparse
+from typing import Any
 
 from modules.util.ModelWeightDtypes import ModelWeightDtypes
 from modules.util.args.BaseArgs import BaseArgs
@@ -46,12 +47,10 @@ class TrainArgs(BaseArgs):
     clear_cache_before_training: bool
 
     # training settings
-    optimizer: Optimizer
-    global_learning_rate_scheduler: LearningRateScheduler
+    learning_rate_scheduler: LearningRateScheduler
     learning_rate: float
-    global_warmup_steps: int
-    global_num_cycles: float
-    weight_decay: float
+    learning_rate_warmup_steps: int
+    learning_rate_cycles: float
     epochs: int
     batch_size: int
     gradient_accumulation_steps: int
@@ -88,6 +87,51 @@ class TrainArgs(BaseArgs):
     lora_weight_dtype: DataType
     attention_mechanism: AttentionMechanism
 
+    # optimizer settings
+    optimizer: Optimizer
+    optimizer_weight_decay: float
+    optimizer_momentum: float
+    optimizer_dampening: float
+    optimizer_nesterov: bool
+    optimizer_eps: float
+    optimizer_foreach: bool
+    optimizer_fused: bool
+    optimizer_min_8bit_size: int
+    optimizer_percentile_clipping: int
+    optimizer_block_wise: bool
+    optimizer_is_paged: bool
+    optimizer_lr_decay: int
+    optimizer_initial_accumulator_value: int
+    optimizer_alpha: float
+    optimizer_centered: bool
+    optimizer_max_unorm: float
+    optimizer_beta2: float
+    optimizer_bias_correction: bool
+    optimizer_amsgrad: bool
+    optimizer_adam_w_mode: bool
+    optimizer_use_bias_correction: bool
+    optimizer_safeguard_warmup: bool
+    optimizer_beta3: float
+    optimizer_decouple: bool
+    optimizer_d0: float
+    optimizer_d_coef: float
+    optimizer_growth_rate: float
+    optimizer_fsdp_in_use: bool
+    optimizer_clip_threshold: float
+    optimizer_decay_rate: float
+    optimizer_beta1: float
+    optimizer_scale_parameter: bool
+    optimizer_relative_step: bool
+    optimizer_warmup_init: bool
+    optimizer_eps2: float
+    optimizer_optim_bits: int
+    optimizer_log_every: int
+    optimizer_no_prox: bool
+    optimizer_maximize: bool
+    optimizer_capturable: bool
+    optimizer_differentiable: bool
+    optimizer_use_triton: bool
+
     # sample settings
     sample_definition_file_name: str
     sample_after: float
@@ -103,8 +147,8 @@ class TrainArgs(BaseArgs):
     save_after: float
     save_after_unit: TimeUnit
 
-    def __init__(self, args: dict):
-        super(TrainArgs, self).__init__(args)
+    def __init__(self, data: list[(str, Any, type, bool)]):
+        super(TrainArgs, self).__init__(data)
 
     def weight_dtypes(self) -> ModelWeightDtypes:
         return ModelWeightDtypes(
@@ -172,9 +216,8 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--optimizer", type=Optimizer, required=False, default=Optimizer.ADAMW, dest="optimizer", help="The optimizer", choices=list(Optimizer))
         parser.add_argument("--learning-rate-scheduler", type=LearningRateScheduler, required=False, default=LearningRateScheduler.CONSTANT, dest="global_learning_rate_scheduler", help="The learning rate scheduler")
         parser.add_argument("--learning-rate", type=float, required=False, default=3e-6, dest="learning_rate", help="The learning rate used when creating the optimizer")
-        parser.add_argument("--learning-rate-warmup-steps", type=int, required=False, default=0, dest="global_warmup_steps", help="The number of warmup steps when creating the learning rate scheduler")
-        parser.add_argument("--learning-rate-cycles", type=float, required=False, default=1, dest="global_num_cycles", help="The number of cycles of the learning rate scheduler")
-        parser.add_argument("--weight-decay", type=float, required=False, default=1e-2, dest="weight_decay", help="The weight decay used when creating the optimizer")
+        parser.add_argument("--learning-rate-warmup-steps", type=int, required=False, default=0, dest="learning_rate_warmup_steps", help="The number of warmup steps when creating the learning rate scheduler")
+        parser.add_argument("--learning-rate-cycles", type=float, required=False, default=1, dest="learning_rate_cycles", help="The number of cycles of the learning rate scheduler")
         parser.add_argument("--epochs", type=int, required=True, dest="epochs", help="Number of epochs to train")
         parser.add_argument("--batch-size", type=int, required=True, dest="batch_size", help="The batch size")
         parser.add_argument("--gradient-accumulation-steps", type=int, required=False, default=1, dest="gradient_accumulation_steps", help="The amount of steps used for gradient accumulation")
@@ -211,6 +254,50 @@ class TrainArgs(BaseArgs):
         parser.add_argument("--lora-weight-dtype", type=DataType, required=False, default=DataType.FLOAT_32, dest="lora_weight_dtype", help="The data type to use for training the LoRA", choices=list(DataType))
         parser.add_argument("--attention-mechanism", type=AttentionMechanism, required=False, default=AttentionMechanism.XFORMERS, dest="attention_mechanism", help="The Attention mechanism to use", choices=list(AttentionMechanism))
 
+        # optimizer settings
+        parser.add_argument("--optimizer-adam-w-mode", type=bool, default=None, dest="optimizer_adam_w_mode", help='Whether to use weight decay correction for Adam optimizer.')
+        parser.add_argument("--optimizer-alpha", type=float, default=None, dest="optimizer_alpha", help='Smoothing parameter for RMSprop and others.')
+        parser.add_argument("--optimizer-amsgrad", type=bool, default=None, dest="optimizer_amsgrad", help='Whether to use the AMSGrad variant for Adam.')
+        parser.add_argument("--optimizer-beta1", type=float, default=None, dest="optimizer_beta1", help='optimizer_momentum term.')
+        parser.add_argument("--optimizer-beta2", type=float, default=None, dest="optimizer_beta2", help='Coefficients for computing running averages of gradient.')
+        parser.add_argument("--optimizer-beta3", type=float, default=None, dest="optimizer_beta3", help='Coefficient for computing the Prodigy stepsize.')
+        parser.add_argument("--optimizer-bias-correction", type=bool, default=None, dest="optimizer_bias_correction", help='Whether to use bias correction in optimization algorithms like Adam.')
+        parser.add_argument("--optimizer-block-wise", type=bool, default=None, dest="optimizer_block_wise", help='Whether to perform block-wise model update.')
+        parser.add_argument("--optimizer-capturable", type=bool, default=None, dest="optimizer_capturable", help='Whether some property of the optimizer can be captured.')
+        parser.add_argument("--optimizer-centered", type=bool, default=None, dest="optimizer_centered", help='Whether to center the gradient before scaling. Great for stabilizing the training process.')
+        parser.add_argument("--optimizer-clip-threshold", type=float, default=None, dest="optimizer_clip_threshold", help='Clipping value for gradients.')
+        parser.add_argument("--optimizer-d0", type=float, default=None, dest="optimizer_d0", help='Initial D estimate for D-adaptation.')
+        parser.add_argument("--optimizer-d-coef", type=float, default=None, dest="optimizer_d_coef", help='Coefficient in the expression for the estimate of d.')
+        parser.add_argument("--optimizer-dampening", type=float, default=None, dest="optimizer_dampening", help='Dampening for optimizer_momentum.')
+        parser.add_argument("--optimizer-decay-rate", type=float, default=None, dest="optimizer_decay_rate", help='Rate of decay for moment estimation.')
+        parser.add_argument("--optimizer-decouple", type=bool, default=None, dest="optimizer_decouple", help='Use AdamW style optimizer_decoupled weight decay.')
+        parser.add_argument("--optimizer-differentiable", type=bool, default=None, dest="optimizer_differentiable", help='Whether the optimization function is optimizer_differentiable.')
+        parser.add_argument("--optimizer-eps", type=float, default=None, dest="optimizer_eps", help='A small value to prevent division by zero.')
+        parser.add_argument("--optimizer-eps2", type=float, default=None, dest="optimizer_eps2", help='A small value to prevent division by zero.')
+        parser.add_argument("--optimizer-foreach", type=bool, default=None, dest="optimizer_foreach", help='If true, apply the optimizer to each parameter independently.')
+        parser.add_argument("--optimizer-fsdp-in-use", type=bool, default=None, dest="optimizer_fsdp_in_use", help='Flag for using sharded parameters.')
+        parser.add_argument("--optimizer-fused", type=bool, default=None, dest="optimizer_fused", help='Whether to use a optimizer_fused implementation if available.')
+        parser.add_argument("--optimizer-growth-rate", type=float, default=None, dest="optimizer_growth_rate", help='Limit for D estimate growth rate.')
+        parser.add_argument("--optimizer-initial-accumulator-value", type=float, default=None, dest="optimizer_initial_accumulator_value", help='Initial value for Adagrad optimizer.')
+        parser.add_argument("--optimizer-is-paged", type=bool, default=None, dest="optimizer_is_paged", help='Whether the optimizer\'s internal state should be paged to CPU.')
+        parser.add_argument("--optimizer-log-every", type=int, default=None, dest="optimizer_log_every", help='Intervals at which logging should occur.')
+        parser.add_argument("--optimizer-lr-decay", type=float, default=None, dest="optimizer_lr_decay", help='Rate at which learning rate decreases.')
+        parser.add_argument("--optimizer-max-unorm", type=float, default=None, dest="optimizer_max_unorm", help='Maximum value for gradient clipping by norms.')
+        parser.add_argument("--optimizer-maximize", type=bool, default=None, dest="optimizer_maximize", help='Whether to optimizer_maximize the optimization function.')
+        parser.add_argument("--optimizer-min-8bit-size", type=int, default=None, dest="optimizer_min_8bit_size", help='Minimum tensor size for 8-bit quantization.')
+        parser.add_argument("--optimizer-momentum", type=float, default=None, dest="optimizer_momentum", help='Factor to accelerate SGD in relevant direction.')
+        parser.add_argument("--optimizer-nesterov", type=bool, default=None, dest="optimizer_nesterov", help='Whether to enable Nesterov optimizer_momentum.')
+        parser.add_argument("--optimizer-no-prox", type=bool, default=None, dest="optimizer_no_prox", help='Whether to use proximity updates or not.')
+        parser.add_argument("--optimizer-optim-bits", type=int, default=None, dest="optimizer_optim_bits", help='Number of bits used for optimization.')
+        parser.add_argument("--optimizer-percentile-clipping", type=float, default=None, dest="optimizer_percentile_clipping", help='Gradient clipping based on percentile values.')
+        parser.add_argument("--optimizer-relative-step", type=bool, default=None, dest="optimizer_relative_step", help='Whether to use a relative step size.')
+        parser.add_argument("--optimizer-safeguard-warmup", type=bool, default=None, dest="optimizer_safeguard_warmup", help='Avoid issues during warm-up stage.')
+        parser.add_argument("--optimizer-scale-parameter", type=bool, default=None, dest="optimizer_scale_parameter", help='Whether to scale the parameter or not.')
+        parser.add_argument("--optimizer-use-bias-correction", type=bool, default=None, dest="optimizer_use_bias_correction", help='Turn on Adam\'s bias correction.')
+        parser.add_argument("--optimizer-use-triton", type=bool, default=None, dest="optimizer_use_triton", help='Whether Triton optimization should be used.')
+        parser.add_argument("--optimizer-warmup-init", type=bool, default=None, dest="optimizer_warmup_init", help='Whether to warm-up the optimizer initialization.')
+        parser.add_argument("--optimizer-weight-decay", type=float, default=None, dest="optimizer_weight_decay", help='Regularization to prevent overfitting.')
+
         # sample settings
         parser.add_argument("--sample-definition-file-name", type=str, required=True, dest="sample_definition_file_name", help="The json file containing the sample definition")
         parser.add_argument("--sample-after", type=float, required=True, dest="sample_after", help="The interval to sample")
@@ -228,43 +315,133 @@ class TrainArgs(BaseArgs):
 
         # @formatter:on
 
-        return TrainArgs(vars(parser.parse_args()))
+        args = TrainArgs.default_values()
+        args.from_dict(vars(parser.parse_args()))
+        return args
 
     @staticmethod
-    def default_values():
-        args = {}
+    def default_values() -> 'TrainArgs':
+        data = []
 
-        args["training_method"] = TrainingMethod.FINE_TUNE
-        args["model_type"] = ModelType.STABLE_DIFFUSION_15
-        args["debug_mode"] = False
-        args["debug_dir"] = "debug"
-        args["workspace_dir"] = "workspace/run"
-        args["cache_dir"] = "workspace-cache/run"
-        args["tensorboard"] = True
-        args["continue_last_backup"] = False
+        # name, default value, data type, nullable
+
+        # general settings
+        data.append(("training_method", TrainingMethod.FINE_TUNE, TrainingMethod, False))
+        data.append(("model_type", ModelType.STABLE_DIFFUSION_15, ModelType, False))
+        data.append(("debug_mode", False, bool, False))
+        data.append(("debug_dir", "debug", str, False))
+        data.append(("workspace_dir", "workspace/run", str, False))
+        data.append(("cache_dir", "workspace-cache/run", str, False))
+        data.append(("tensorboard", True, bool, False))
+        data.append(("continue_last_backup", False, bool, False))
 
         # model settings
-        args["base_model_name"] = "runwayml/stable-diffusion-v1-5"
-        args["extra_model_name"] = ""
-        args["weight_dtype"] = DataType.FLOAT_32
-        args["text_encoder_weight_dtype"] = DataType.NONE
-        args["unet_weight_dtype"] = DataType.NONE
-        args["vae_weight_dtype"] = DataType.FLOAT_32
-        args["output_dtype"] = DataType.FLOAT_32
-        args["output_model_format"] = ModelFormat.SAFETENSORS
-        args["output_model_destination"] = "models/model.safetensors"
-        args["gradient_checkpointing"] = True
+        data.append(("base_model_name", "runwayml/stable-diffusion-v1-5", str, False))
+        data.append(("extra_model_name", "", str, False))
+        data.append(("weight_dtype", DataType.FLOAT_32, DataType, False))
+        data.append(("text_encoder_weight_dtype", DataType.NONE, DataType, False))
+        data.append(("unet_weight_dtype", DataType.NONE, DataType, False))
+        data.append(("vae_weight_dtype", DataType.FLOAT_32, DataType, False))
+        data.append(("output_dtype", DataType.FLOAT_32, DataType, False))
+        data.append(("output_model_format", ModelFormat.SAFETENSORS, ModelFormat, False))
+        data.append(("output_model_destination", "models/model.safetensors", str, False))
+        data.append(("gradient_checkpointing", True, bool, False))
 
         # data settings
-        args["concept_file_name"] = "training_concepts/concepts.json"
-        args["circular_mask_generation"] = False
-        args["random_rotate_and_crop"] = False
-        args["aspect_ratio_bucketing"] = True
-        args["latent_caching"] = True
-        args["latent_caching_epochs"] = 1
-        args["clear_cache_before_training"] = True
+        data.append(("concept_file_name", "training_concepts/concepts.json", str, False))
+        data.append(("circular_mask_generation", False, bool, False))
+        data.append(("random_rotate_and_crop", False, bool, False))
+        data.append(("aspect_ratio_bucketing", True, bool, False))
+        data.append(("latent_caching", True, bool, False))
+        data.append(("latent_caching_epochs", 1, int, False))
+        data.append(("clear_cache_before_training", True, bool, False))
 
         # training settings
+        data.append(("learning_rate_scheduler", LearningRateScheduler.CONSTANT, LearningRateScheduler, False))
+        data.append(("learning_rate", 3e-6, float, False))
+        data.append(("learning_rate_warmup_steps", 200, int, False))
+        data.append(("learning_rate_cycles", 1, int, False))
+        data.append(("epochs", 100, int, False))
+        data.append(("batch_size", 1, int, False))
+        data.append(("gradient_accumulation_steps", 1, int, False))
+        data.append(("ema", EMAMode.OFF, EMAMode, False))
+        data.append(("ema_decay", 0.999, float, False))
+        data.append(("ema_update_step_interval", 5, int, False))
+        data.append(("train_text_encoder", True, bool, False))
+        data.append(("train_text_encoder_epochs", 30, int, False))
+        data.append(("text_encoder_learning_rate", 3e-6, float, True))
+        data.append(("text_encoder_layer_skip", 0, int, False))
+        data.append(("train_unet", True, bool, False))
+        data.append(("train_unet_epochs", 10000, int, False))
+        data.append(("unet_learning_rate", 3e-6, float, True))
+        data.append(("offset_noise_weight", 0.0, float, False))
+        data.append(("perturbation_noise_weight", 0.0, float, False))
+        data.append(("rescale_noise_scheduler_to_zero_terminal_snr", False, bool, False))
+        data.append(("force_v_prediction", False, bool, False))
+        data.append(("force_epsilon_prediction", False, bool, False))
+        data.append(("train_device", "cuda", str, False))
+        data.append(("temp_device", "cpu", str, False))
+        data.append(("train_dtype", DataType.FLOAT_16, DataType, False))
+        data.append(("only_cache", False, bool, False))
+        data.append(("resolution", 512, int, False))
+        data.append(("masked_training", False, bool, False))
+        data.append(("unmasked_probability", 0.1, float, False))
+        data.append(("unmasked_weight", 0.1, float, False))
+        data.append(("normalize_masked_area_loss", False, bool, False))
+        data.append(("max_noising_strength", 1.0, float, False))
+        data.append(("token_count", 1, int, False))
+        data.append(("initial_embedding_text", "*", str, False))
+        data.append(("embedding_weight_dtype", DataType.FLOAT_32, DataType, False))
+        data.append(("lora_rank", 16, int, False))
+        data.append(("lora_alpha", 1.0, float, False))
+        data.append(("lora_weight_dtype", DataType.FLOAT_32, DataType, False))
+        data.append(("attention_mechanism", AttentionMechanism.XFORMERS, AttentionMechanism, False))
+
+        # optimizer settings
+        data.append(("optimizer", Optimizer.ADAMW, Optimizer, False))
+        data.append(("optimizer_adam_w_mode", None, bool, True))
+        data.append(("optimizer_alpha", None, float, True))
+        data.append(("optimizer_amsgrad", None, bool, True))
+        data.append(("optimizer_beta1", None, float, True))
+        data.append(("optimizer_beta2", None, float, True))
+        data.append(("optimizer_beta3", None, float, True))
+        data.append(("optimizer_bias_correction", None, bool, True))
+        data.append(("optimizer_block_wise", None, bool, True))
+        data.append(("optimizer_capturable", None, bool, True))
+        data.append(("optimizer_centered", None, bool, True))
+        data.append(("optimizer_clip_threshold", None, float, True))
+        data.append(("optimizer_d0", None, float, True))
+        data.append(("optimizer_d_coef", None, float, True))
+        data.append(("optimizer_dampening", None, float, True))
+        data.append(("optimizer_decay_rate", None, float, True))
+        data.append(("optimizer_decouple", None, bool, True))
+        data.append(("optimizer_differentiable", None, bool, True))
+        data.append(("optimizer_eps", None, float, True))
+        data.append(("optimizer_eps2", None, float, True))
+        data.append(("optimizer_foreach", None, bool, True))  # Disabled, because it uses too much VRAM
+        data.append(("optimizer_fsdp_in_use", None, bool, True))
+        data.append(("optimizer_fused", None, bool, True))
+        data.append(("optimizer_growth_rate", None, float, True))
+        data.append(("optimizer_initial_accumulator_value", None, int, True))
+        data.append(("optimizer_is_paged", None, bool, True))
+        data.append(("optimizer_log_every", None, int, True))
+        data.append(("optimizer_lr_decay", None, float, True))
+        data.append(("optimizer_max_unorm", None, float, True))
+        data.append(("optimizer_maximize", None, bool, True))
+        data.append(("optimizer_min_8bit_size", None, int, True))
+        data.append(("optimizer_momentum", None, float, True))
+        data.append(("optimizer_nesterov", None, bool, True))
+        data.append(("optimizer_no_prox", None, bool, True))
+        data.append(("optimizer_optim_bits", None, int, True))
+        data.append(("optimizer_percentile_clipping", None, float, True))
+        data.append(("optimizer_relative_step", None, bool, True))
+        data.append(("optimizer_safeguard_warmup", None, bool, True))
+        data.append(("optimizer_scale_parameter", None, bool, True))
+        data.append(("optimizer_use_bias_correction", None, bool, True))
+        data.append(("optimizer_use_triton", None, bool, True))
+        data.append(("optimizer_warmup_init", None, bool, True))
+        data.append(("optimizer_weight_decay", None, float, True))
+
         args["epochs"] = 100
         args["batch_size"] = 1
         args["gradient_accumulation_steps"] = 1
@@ -372,18 +549,18 @@ class TrainArgs(BaseArgs):
         args["text_encoder_2_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT        
         
         # sample settings
-        args["sample_definition_file_name"] = "training_samples/samples.json"
-        args["sample_after"] = 10
-        args["sample_after_unit"] = TimeUnit.MINUTE
-        args["sample_image_format"] = ImageFormat.JPG
+        data.append(("sample_definition_file_name", "training_samples/samples.json", str, False))
+        data.append(("sample_after", 10, int, False))
+        data.append(("sample_after_unit", TimeUnit.MINUTE, TimeUnit, False))
+        data.append(("sample_image_format", ImageFormat.JPG, ImageFormat, False))
 
         # backup settings
-        args["backup_after"] = 30
-        args["backup_after_unit"] = TimeUnit.MINUTE
-        args["rolling_backup"] = False
-        args["rolling_backup_count"] = 3
-        args["backup_before_save"] = True
-        args["save_after"] = 0
-        args["save_after_unit"] = TimeUnit.NEVER
+        data.append(("backup_after", 30, int, False))
+        data.append(("backup_after_unit", TimeUnit.MINUTE, TimeUnit, False))
+        data.append(("rolling_backup", False, bool, False))
+        data.append(("rolling_backup_count", 3, int, False))
+        data.append(("backup_before_save", True, bool, False))
+        data.append(("save_after", 0, int, False))
+        data.append(("save_after_unit", TimeUnit.NEVER, TimeUnit, False))
 
-        return TrainArgs(args)
+        return TrainArgs(data)

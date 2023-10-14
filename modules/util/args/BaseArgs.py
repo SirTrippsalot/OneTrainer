@@ -1,51 +1,74 @@
 from enum import Enum
+from typing import Any
 
 
 class BaseArgs:
-    def __init__(self, args: dict):
-        for (key, value) in args.items():
-            setattr(self, key, value)
+    def __init__(self, data: list[(str, Any, type, bool)]):
+        self.types = {}
+        self.nullables = {}
+        for (name, value, var_type, nullable) in data:
+            setattr(self, name, value)
+            self.types[name] = var_type
+            self.nullables[name] = nullable
 
-    def to_json(self):
+    def to_dict(self) -> dict:
         data = {}
-        for (key, value) in vars(self).items():
-            if isinstance(value, str):
-                data[key] = value
-            elif isinstance(value, Enum):
-                data[key] = str(value)
-            elif isinstance(value, bool):
-                data[key] = value
-            elif isinstance(value, int):
-                data[key] = value
-            elif isinstance(value, float):
-                data[key] = value
+        for (name, _) in self.types.items():
+            value = getattr(self, name)
+            if self.types[name] == str:
+                data[name] = value
+            elif issubclass(self.types[name], Enum):
+                data[name] = str(value)
+            elif self.types[name] == bool:
+                data[name] = value
+            elif self.types[name] == int:
+                data[name] = value
+            elif self.types[name] == float:
+                if value in [float('inf'), float('-inf')]:
+                    data[name] = str(value)
+                else:
+                    data[name] = value
             else:
-                data[key] = value
+                data[name] = value
 
         return data
 
-    def from_json(self, data):
-        for (key, value) in vars(self).items():
+    def from_dict(self, data):
+        for (name, _) in self.types.items():
             try:
-                if isinstance(value, str):
-                    setattr(self, key, data[key])
-                elif isinstance(value, Enum):
-                    enum_type = type(getattr(self, key))
-                    setattr(self, key, enum_type[data[key]])
-                elif isinstance(value, bool):
-                    setattr(self, key, data[key])
-                elif isinstance(value, int):
-                    setattr(self, key, int(data[key]))
-                elif isinstance(value, float):
-                    setattr(self, key, float(data[key]))
+                if self.types[name] == str:
+                    setattr(self, name, data[name])
+                elif issubclass(self.types[name], Enum):
+                    if isinstance(data[name], str):
+                        if self.nullables[name]:
+                            setattr(self, name, None if data[name] is None else self.types[name][data[name]])
+                        else:
+                            setattr(self, name, self.types[name][data[name]])
+                    else:
+                        setattr(self, name, data[name])
+                elif self.types[name] == bool:
+                    setattr(self, name, data[name])
+                elif self.types[name] == int:
+                    if self.nullables[name]:
+                        setattr(self, name, None if data[name] is None else int(data[name]))
+                    else:
+                        setattr(self, name, int(data[name]))
+                elif self.types[name] == float:
+                    # check for strings to support dicts loaded from json
+                    if data[name] in [float('inf'), float('-inf'), 'inf', '-inf']:
+                        setattr(self, name, float(data[name]))
+                    if self.nullables[name]:
+                        setattr(self, name, None if data[name] is None else float(data[name]))
+                    else:
+                        setattr(self, name, float(data[name]))
                 else:
-                    setattr(self, key, data[key])
-            except Exception as e:
-                if key in data:
-                    print(f"Could not set {key} as {str(data[key])}")
+                    setattr(self, name, data[name])
+            except Exception:
+                if name in data:
+                    print(f"Could not set {name} as {str(data[name])}")
                 else:
-                    print(f"Could not set {key}, not found.")
-
+                    #print(f"Could not set {name}, not found.")
+                    pass
         return self
 
     def __to_arg_name(self, var_name: str) -> str:
@@ -56,19 +79,27 @@ class BaseArgs:
 
     def to_args(self) -> str:
         data = []
-        for (key, value) in vars(self).items():
-            if isinstance(value, str):
-                data.append(f"{self.__to_arg_name(key)}=\"{value}\"")
-            elif isinstance(value, Enum):
-                data.append(f"{self.__to_arg_name(key)}=\"{str(value)}\"")
-            elif isinstance(value, bool):
-                if value:
-                    data.append(self.__to_arg_name(key))
-            elif isinstance(value, int):
-                data.append(f"{self.__to_arg_name(key)}=\"{str(value)}\"")
-            elif isinstance(value, float):
-                data.append(f"{self.__to_arg_name(key)}=\"{str(value)}\"")
-            elif value is not None:
-                data.append(f"{self.__to_arg_name(key)}=\"{str(value)}\"")
+        for (name, _) in self.types.items():
+            value = getattr(self, name)
+            if value is not None:
+                if self.types[name] == str:
+                    data.append(f"{self.__to_arg_name(name)}=\"{value}\"")
+                elif issubclass(self.types[name], Enum):
+                    data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
+                elif self.types[name] == bool:
+                    if self.nullables[name]:
+                        data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
+                    else:
+                        if value:
+                            data.append(self.__to_arg_name(name))
+                elif self.types[name] == int:
+                    data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
+                elif self.types[name] == float:
+                    if value in [float('inf'), float('-inf')]:
+                        data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
+                    else:
+                        data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
+                else:
+                    data.append(f"{self.__to_arg_name(name)}=\"{str(value)}\"")
 
         return ' '.join(data)
