@@ -442,112 +442,43 @@ class TrainArgs(BaseArgs):
         data.append(("optimizer_warmup_init", None, bool, True))
         data.append(("optimizer_weight_decay", None, float, True))
 
-        args["epochs"] = 100
-        args["batch_size"] = 1
-        args["gradient_accumulation_steps"] = 1
-        args["ema"] = EMAMode.OFF
-        args["ema_decay"] = 0.999
-        args["ema_update_step_interval"] = 5
-        args["text_encoder_layer_skip"] = 0
-        args["offset_noise_weight"] = 0.0
-        args["perturbation_noise_weight"] = 0.0
-        args["rescale_noise_scheduler_to_zero_terminal_snr"] = False
-        args["force_v_prediction"] = False
-        args["force_epsilon_prediction"] = False
-        args["train_device"] = "cuda"
-        args["temp_device"] = "cpu"
-        args["train_dtype"] = DataType.FLOAT_16
-        args["only_cache"] = False
-        args["resolution"] = 512
-        args["masked_training"] = False
-        args["unmasked_probability"] = 0.1
-        args["unmasked_weight"] = 0.1
-        args["normalize_masked_area_loss"] = False
-        args["max_noising_strength"] = 1.0
-        args["token_count"] = 1
-        args["initial_embedding_text"] = "*"
-        args["embedding_weight_dtype"] = DataType.FLOAT_32
-        args["lora_rank"] = 16
-        args["lora_alpha"] = 1.0
-        args["lora_weight_dtype"] = DataType.FLOAT_32
-        args["attention_mechanism"] = AttentionMechanism.XFORMERS
-        
-        # optimizer settings
-        args["optimizer"] = Optimizer.ADAMW
-        args["weight_decay"] = 1e-2
-        args["momentum"] = 0.99
-        args["dampening"] = 0
-        args["nesterov"] = False
-        args["eps"] = 1e-8
-        args["foreach"] = False  # Disabled, because it uses too much VRAM
-        args["fused"] = True
-        args["min_8bit_size"] = 4096
-        args["percentile_clipping"] = 100
-        args["block_wise"] = True
-        args["is_paged"] = False
-        args["lr_decay"] = 0
-        args["initial_accumulator_value"] = 0
-        args["alpha"] = 0.99
-        args["centered"] = False
-        args["max_unorm"] = 0.02
-        args["betas"] = (0.999, 0.999)
-        args["bias_correction"] = True
-        args["amsgrad"] = False
-        args["adam_w_mode"] = True
-        args["use_bias_correction"] = True
-        args["safeguard_warmup"] = True
-        args["beta3"] = None
-        args["decouple"] = False
-        args["d0"] = 1e-6
-        args["d_coef"] = 1.0
-        args["growth_rate"] = float('inf')
-        args["fsdp_in_use"] = False
-        args["clip_threshold"] = 1.0
-        args["decay_rate"] = -0.8
-        args["beta1"] = None
-        args["weight_decay"] = 0.0
-        args["scale_parameter"] = True
-        args["relative_step"] = True
-        args["warmup_init"] = False
-        args["eps_tuple"] = (1e-30, 1e-3)
-        
         # global scheduler settings
-        args["schedulers_advanced"] = False
-        args["global_train_switch"] = True
-        args["global_learning_rate"] = 3e-6
-        args["global_min_learning_rate"] = 0
-        args["global_num_cycles"] = 1
-        args["global_warmup_steps"] = 200
-        args["global_max_train_epochs"] = 10000
-        args["global_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
-        
+        data.append(("schedulers_advanced", False, bool, False))
+        data.append(("global_train_switch", True, bool, False))
+        data.append(("global_learning_rate", 3e-6, float, False))
+        data.append(("global_min_learning_rate", 0, int, False))
+        data.append(("global_num_cycles", 1, int, False))
+        data.append(("global_warmup_steps", 200, int, False))
+        data.append(("global_max_train_epochs", 10000, int, False))
+        data.append(("global_learning_rate_scheduler", LearningRateScheduler.CONSTANT, type(LearningRateScheduler.CONSTANT), False))
+
         # unet scheduler settings
-        args["unet_train_switch"] = True
-        args["unet_learning_rate"] = 3e-6
-        args["unet_min_learning_rate"] = 0
-        args["unet_num_cycles"] = 1
-        args["unet_warmup_steps"] = 200
-        args["unet_max_train_epochs"] = 10000
-        args["unet_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
-        
+        data.append(("unet_train_switch", True, bool, False))
+        data.append(("unet_learning_rate", 3e-6, float, False))
+        data.append(("unet_min_learning_rate", 0, int, False))
+        data.append(("unet_num_cycles", 1, int, False))
+        data.append(("unet_warmup_steps", 200, int, False))
+        data.append(("unet_max_train_epochs", 10000, int, False))
+        data.append(("unet_learning_rate_scheduler", LearningRateScheduler.CONSTANT, type(LearningRateScheduler.CONSTANT), False))
+
         # TE scheduler settings
-        args["text_encoder_train_switch"] = True
-        args["text_encoder_learning_rate"] = 3e-6
-        args["text_encoder_min_learning_rate"] = 0
-        args["text_encoder_num_cycles"] = 1
-        args["text_encoder_warmup_steps"] = 200
-        args["text_encoder_max_train_epochs"] = 10000
-        args["text_encoder_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
-        
+        data.append(("text_encoder_train_switch", True, bool, False))
+        data.append(("text_encoder_learning_rate", 3e-6, float, False))
+        data.append(("text_encoder_min_learning_rate", 0, int, False))
+        data.append(("text_encoder_num_cycles", 1, int, False))
+        data.append(("text_encoder_warmup_steps", 200, int, False))
+        data.append(("text_encoder_max_train_epochs", 10000, int, False))
+        data.append(("text_encoder_learning_rate_scheduler", LearningRateScheduler.CONSTANT, type(LearningRateScheduler.CONSTANT), False))
+
         # TE2 scheduler settings
-        args["text_encoder_2_train_switch"] = True
-        args["text_encoder_2_learning_rate"] = 3e-6
-        args["text_encoder_2_min_learning_rate"] = 0
-        args["text_encoder_2_num_cycles"] = 1
-        args["text_encoder_2_warmup_steps"] = 200
-        args["text_encoder_2_max_train_epochs"] = 10000
-        args["text_encoder_2_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT        
-        
+        data.append(("text_encoder_2_train_switch", True, bool, False))
+        data.append(("text_encoder_2_learning_rate", 3e-6, float, False))
+        data.append(("text_encoder_2_min_learning_rate", 0, int, False))
+        data.append(("text_encoder_2_num_cycles", 1, int, False))
+        data.append(("text_encoder_2_warmup_steps", 200, int, False))
+        data.append(("text_encoder_2_max_train_epochs", 10000, int, False))
+        data.append(("text_encoder_2_learning_rate_scheduler", LearningRateScheduler.CONSTANT, type(LearningRateScheduler.CONSTANT), False))
+
         # sample settings
         data.append(("sample_definition_file_name", "training_samples/samples.json", str, False))
         data.append(("sample_after", 10, int, False))

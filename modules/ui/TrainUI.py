@@ -327,7 +327,7 @@ class TrainUI(ctk.CTk):
         components.label(scroll_frame, 1, 0, "Learning Rate Scheduler",
                          tooltip="Learning rate scheduler that automatically changes the learning rate during training")
         components.options_adv(scroll_frame, 1, 1, [str(x) for x in list(LearningRateScheduler)], self.ui_state,
-                           "global_learning_rate_scheduler", self.open_scheduler_params_window)
+                           "global_learning_rate_scheduler", adv_command=self.open_scheduler_params_window)
 
         # learning rate
         components.label(scroll_frame, 2, 0, "Learning Rate",
