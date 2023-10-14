@@ -343,6 +343,7 @@ class TrainArgs(BaseArgs):
         args["global_warmup_steps"] = 200
         args["global_max_train_epochs"] = 10000
         args["global_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        
         # unet scheduler settings
         args["unet_train_switch"] = True
         args["unet_learning_rate"] = 3e-6
@@ -351,6 +352,7 @@ class TrainArgs(BaseArgs):
         args["unet_warmup_steps"] = 200
         args["unet_max_train_epochs"] = 10000
         args["unet_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        
         # TE scheduler settings
         args["text_encoder_train_switch"] = True
         args["text_encoder_learning_rate"] = 3e-6
@@ -359,6 +361,7 @@ class TrainArgs(BaseArgs):
         args["text_encoder_warmup_steps"] = 200
         args["text_encoder_max_train_epochs"] = 10000
         args["text_encoder_learning_rate_scheduler"] = LearningRateScheduler.CONSTANT
+        
         # TE2 scheduler settings
         args["text_encoder_2_train_switch"] = True
         args["text_encoder_2_learning_rate"] = 3e-6
