@@ -186,13 +186,48 @@ class BaseWuerstchenSetup(
         predicted = data['predicted']
         target = data['target']
         timestep = data['timestep']
+        batch_size = predicted.shape[0]
+        
+        mse_strength = 0.5
+        mae_strength = 0.3
+        cosine_strength = 0.2
+        mae_losses, mse_losses, cosine_sim_losses = 0, 0, 0
 
-        losses = F.mse_loss(
-            predicted,
-            target,
-            reduction='none'
-        ).mean([1, 2, 3])
-
+        #MSE/L2 Loss
+        if mse_strength != 0:
+            mse_losses = F.mse_loss(
+                predicted,
+                target,
+                reduction='none'
+            ).mean([1, 2, 3])
+            
+        
+        #MAE/L1 Loss
+        if mae_strength != 0:
+            mae_losses = F.l1_loss(
+                predicted, 
+                target, 
+                reduction='none'
+            ).mean([1, 2, 3])
+        
+        #Cosine similarity loss
+        if cosine_strength != 0:
+            predicted_normalized = F.normalize(predicted, p=2, dim=1)
+            target_normalized = F.normalize(target, p=2, dim=1)
+            cosine_sim = torch.nn.functional.cosine_similarity(predicted_normalized, target_normalized, dim=1)
+            adjusted_cosine_sim = (1 + cosine_sim) / 2
+            cosine_sim_losses = 1 - adjusted_cosine_sim
+            cosine_sim_losses = cosine_sim_losses.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).mean([1, 2, 3])
+            
+        
+        losses = (
+            mse_strength * mse_losses +          
+            mae_strength * mae_losses +          
+            cosine_strength * cosine_sim_losses
+        )
+        
+        losses = losses * batch_size
+        
         k = 1.0
         gamma = 1.0
         alpha_cumprod = self.__alpha_cumprod(target, timestep)
