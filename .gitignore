@@ -11,3 +11,7 @@ debug.py
 train.bat
 *.pyc
 *.bak
+
+Temp/
+
+update - resources only.bat

@@ -1,5 +1,6 @@
 import json
 
+from torch.utils.data.dataloader import default_collate
 from mgds.DebugDataLoaderModules import SaveImage, SaveText, DecodeTokens
 from mgds.DiffusersDataLoaderModules import *
 from mgds.GenericDataLoaderModules import *
@@ -15,6 +16,9 @@ from modules.util.TrainProgress import TrainProgress
 from modules.util.args.TrainArgs import TrainArgs
 from modules.util.enum.TrainingMethod import TrainingMethod
 
+def custom_collate_fn(batch):
+    flat_batch = [item for sublist in batch for item in sublist]
+    return default_collate(flat_batch)
 
 class WuerstchenBaseDataLoader(BaseDataLoader):
     def __init__(
@@ -39,7 +43,7 @@ class WuerstchenBaseDataLoader(BaseDataLoader):
             concepts=concepts,
             train_progress=train_progress,
         )
-        self.__dl = TrainDataLoader(self.__ds, args.batch_size)
+        self.__dl = TrainDataLoader(self.__ds, args.batch_size, collate_fn=custom_collate_fn)
 
     def get_data_set(self) -> MGDS:
         return self.__ds
@@ -189,10 +193,10 @@ class WuerstchenBaseDataLoader(BaseDataLoader):
 
 
     def _preparation_modules(self, args: TrainArgs, model: WuerstchenModel):
-        downscale_image = ScaleImage(in_name='image', out_name='image', factor=0.75)
+        downscale_image = ScaleImage(in_name='image', out_name='image', factor=1)
         normalize_image = NormalizeImageChannels(image_in_name='image', image_out_name='image', mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         encode_image = EncodeWuerstchenEffnet(in_name='image', out_name='latent_image', effnet_encoder=model.effnet_encoder, override_allow_mixed_precision=False)
-        downscale_mask = ScaleImage(in_name='mask', out_name='latent_mask', factor=0.75)
+        downscale_mask = ScaleImage(in_name='mask', out_name='latent_mask', factor=1)
         tokenize_prompt = Tokenize(in_name='prompt', tokens_out_name='tokens', mask_out_name='tokens_mask', tokenizer=model.prior_tokenizer, max_token_length=model.prior_tokenizer.model_max_length)
         encode_prompt = EncodeClipText(in_name='tokens', hidden_state_out_name='text_encoder_hidden_state', pooled_out_name=None, add_layer_norm=True, text_encoder=model.prior_text_encoder, hidden_state_output_index=-1)
 
@@ -283,7 +287,7 @@ class WuerstchenBaseDataLoader(BaseDataLoader):
     def _debug_modules(self, args: TrainArgs, model: WuerstchenModel):
         debug_dir = os.path.join(args.debug_dir, "dataloader")
 
-        upscale_mask = ScaleImage(in_name='latent_mask', out_name='decoded_mask', factor=1.0/0.75)
+        upscale_mask = ScaleImage(in_name='latent_mask', out_name='decoded_mask', factor=1.0/1)
         decode_prompt = DecodeTokens(in_name='tokens', out_name='decoded_prompt', tokenizer=model.prior_tokenizer)
         # SaveImage(image_in_name='latent_mask', original_path_in_name='image_path', path=debug_dir, in_range_min=0, in_range_max=1),
         save_mask = SaveImage(image_in_name='decoded_mask', original_path_in_name='image_path', path=debug_dir, in_range_min=0, in_range_max=1)

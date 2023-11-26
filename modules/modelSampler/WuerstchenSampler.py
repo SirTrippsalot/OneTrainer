@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Callable
 
 import torch
+import re
 from PIL import Image
 from tqdm import tqdm
+from datetime import datetime
 
 from modules.model.WuerstchenModel import WuerstchenModel
 from modules.modelSampler.BaseModelSampler import BaseModelSampler
@@ -322,6 +324,11 @@ class WuerstchenSampler(BaseModelSampler):
             prior_tokenizer,
             on_update_progress
         )
+        
+        clean_prompt = re.sub(r'[<>:"/\\|?*]', '', prompt)[:20]
+        current_datetime = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        filename = f"{current_datetime}_{clean_prompt}.pt"
+        torch.save(image_embedding, "Temp\\"+filename)
 
         latent_image = self.__sample_decoder(
             prompt,
