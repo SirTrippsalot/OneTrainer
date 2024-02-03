@@ -156,6 +156,16 @@ class BasePixArtAlphaSetup(
             else:
                 text_encoder_output = batch['text_encoder_hidden_state']
                 text_encoder_attention_mask = batch['tokens_mask']
+                
+            dropout_chance = getattr(args, 'conditional_dropout', 0.2)
+            dropout_mask = torch.rand(text_encoder_output.size(0), device=text_encoder_output.device) < dropout_chance
+            text_encoder_output[dropout_mask] = 0 
+            
+            # # Print the number of dropped items and the dropout mask
+            # num_dropped = dropout_mask.sum().item()
+            # print(f"Number of dropped items in batch: {num_dropped}")
+            # print("Dropout mask:", dropout_mask.tolist())
+
 
             latent_image = batch['latent_image']
             scaled_latent_image = latent_image * vae_scaling_factor
