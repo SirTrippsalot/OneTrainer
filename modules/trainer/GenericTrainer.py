@@ -492,46 +492,48 @@ class GenericTrainer(BaseTrainer):
 
                 self.callbacks.on_update_status("training")
 
-                model_output_data = self.model_setup.predict(self.model, batch, self.config, train_progress)
+                for phase in [0, 1]:
+                    train_phase = 'TENC' if phase == 0 else 'Prior'
+                    model_output_data = self.model_setup.predict(self.model, batch, self.config, train_progress)
 
-                loss = self.model_setup.calculate_loss(self.model, batch, model_output_data, self.config)
+                    loss = self.model_setup.calculate_loss(self.model, batch, model_output_data, self.config)
 
-                loss = loss / self.config.gradient_accumulation_steps
-                if scaler:
-                    scaler.scale(loss).backward()
-                else:
-                    loss.backward()
-                has_gradient = True
-                accumulated_loss += loss.item()
-
-                if self.__is_update_step(train_progress):
+                    loss = loss / self.config.gradient_accumulation_steps
                     if scaler:
-                        scaler.unscale_(self.model.optimizer)
-                        nn.utils.clip_grad_norm_(self.parameters, 1)
-                        scaler.step(self.model.optimizer)
-                        scaler.update()
+                        scaler.scale(loss).backward()
                     else:
-                        nn.utils.clip_grad_norm_(self.parameters, 1)
-                        self.model.optimizer.step()
+                        loss.backward()
+                    has_gradient = True
+                    accumulated_loss += loss.item()
 
-                    lr_scheduler.step()  # done before zero_grad, because some lr schedulers need gradients
-                    self.model.optimizer.zero_grad(set_to_none=True)
-                    has_gradient = False
+                    if self.__is_update_step(train_progress):
+                        if scaler:
+                            scaler.unscale_(self.model.optimizer)
+                            nn.utils.clip_grad_norm_(self.parameters, 1)
+                            scaler.step(self.model.optimizer)
+                            scaler.update()
+                        else:
+                            nn.utils.clip_grad_norm_(self.parameters, 1)
+                            self.model.optimizer.step()
 
-                    self.tensorboard.add_scalar(
-                        "learning_rate", lr_scheduler.get_last_lr()[0], train_progress.global_step
-                    )
-                    self.tensorboard.add_scalar("loss", accumulated_loss, train_progress.global_step)
-                    ema_loss = ema_loss or accumulated_loss
-                    ema_loss = (ema_loss * 0.99) + (accumulated_loss * 0.01)
-                    step_tqdm.set_postfix({
-                        'loss': accumulated_loss,
-                        'smooth loss': ema_loss,
-                    })
-                    self.tensorboard.add_scalar("smooth loss", ema_loss, train_progress.global_step)
-                    accumulated_loss = 0.0
+                        lr_scheduler.step()  # done before zero_grad, because some lr schedulers need gradients
+                        self.model.optimizer.zero_grad(set_to_none=True)
+                        has_gradient = False
 
-                    self.model_setup.after_optimizer_step(self.model, self.config, train_progress)
+                        self.tensorboard.add_scalar(
+                            "learning_rate", lr_scheduler.get_last_lr()[0], train_progress.global_step
+                        )
+                        self.tensorboard.add_scalar(f"{train_phase}-loss", accumulated_loss, train_progress.global_step)
+                        ema_loss = ema_loss or accumulated_loss
+                        ema_loss = (ema_loss * 0.99) + (accumulated_loss * 0.01)
+                        step_tqdm.set_postfix({
+                            'loss': accumulated_loss,
+                            'smooth loss': ema_loss,
+                        })
+                        self.tensorboard.add_scalar(f"{train_phase}-smooth loss", ema_loss, train_progress.global_step)
+                        accumulated_loss = 0.0
+
+                        self.model_setup.after_optimizer_step(self.model, self.config, train_progress, train_phase)
                     if self.model.ema:
                         update_step = train_progress.global_step // self.config.gradient_accumulation_steps
                         self.tensorboard.add_scalar(

@@ -123,14 +123,15 @@ class WuerstchenFineTuneSetup(BaseWuerstchenSetup):
 
     def after_optimizer_step(
             self,
-            model: WuerstchenModel,
-            config: TrainConfig,
-            train_progress: TrainProgress
+            model,
+            config,
+            train_progress,
+            train_phase  # New parameter to control the training phase
     ):
         train_text_encoder = config.text_encoder.train and \
                              not self.stop_text_encoder_training_elapsed(config, model.train_progress)
-        model.prior_text_encoder.requires_grad_(train_text_encoder)
+        model.prior_text_encoder.requires_grad_(train_text_encoder if train_phase == 'TENC' else False)
 
         train_prior = config.prior.train and \
                       not self.stop_prior_training_elapsed(config, model.train_progress)
-        model.prior_prior.requires_grad_(train_prior)
+        model.prior_prior.requires_grad_(train_prior if train_phase == 'Prior' else False)
