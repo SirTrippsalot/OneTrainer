@@ -32,7 +32,7 @@ class OptimizerParamsWindow(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
         self.title("Optimizer Settings")
-        self.geometry("800x500")
+        self.geometry("800x600")
         self.resizable(True, True)
         self.wait_visibility()
         self.grab_set()
@@ -144,6 +144,12 @@ class OptimizerParamsWindow(ctk.CTkToplevel):
             'adam_debias': {'title': 'Adam Debias', 'tooltip': 'Only correct the denominator to avoid inflating step sizes early in training.', 'type': 'bool'},
             'slice_p': {'title': 'Slice parameters', 'tooltip': 'Reduce memory usage by calculating LR adaptation statistics on only every pth entry of each tensor. For values greater than 1 this is an approximation to standard Prodigy. Values ~11 are reasonable.', 'type': 'int'},
             'cautious': {'title': 'Cautious', 'tooltip': 'Whether to use the Cautious variant.', 'type': 'bool'},
+            'initial_accumulator': {'title': 'Initial Accumulator', 'tooltip': 'Initial values for first and second moments.', 'type': 'float'},
+            'enable_lookahead': {'title': 'Enable Lookahead', 'tooltip': 'Enable the Lookahead optimizer wrapper.', 'type': 'bool'},
+            'lookahead_alpha': {'title': 'Lookahead Alpha', 'tooltip': 'Linear interpolation factor.', 'type': 'float'},
+            'lookahead_k': {'title': 'lookahead_k', 'tooltip': 'Number of lookahead steps.', 'type': 'int'},
+            'lookahead_pullback_momentum': {'title': 'Lookahead Pullback Momentum', 'tooltip': 'Change to inner optimizer momentum on interpolation update.[none | reset | pullback]', 'type': 'str'},
+
         }
         # @formatter:on
 

@@ -95,6 +95,11 @@ class TrainOptimizerConfig(BaseConfig):
     adam_debias: bool
     slice_p: int
     cautious: bool
+    initial_accumulator: float
+    enable_lookahead: bool
+    lookahead_alpha: float
+    lookahead_k: int
+    lookahead_pullback_momentum: str
 
     def __init__(self, data: list[(str, Any, type, bool)]):
         super().__init__(data)
@@ -164,6 +169,12 @@ class TrainOptimizerConfig(BaseConfig):
         data.append(("adam_debias", False, bool, False))
         data.append(("slice_p", None, int, True))
         data.append(("cautious", False, bool, False))
+        data.append(("initial_accumulator", None, float, True))
+        data.append(("enable_lookahead", False, bool, False))
+        data.append(("lookahead_alpha", None, float, True))
+        data.append(("lookahead_k", None, int, True))
+        data.append(("lookahead_pullback_momentum", None, str, True))
+        
 
         return TrainOptimizerConfig(data)
 

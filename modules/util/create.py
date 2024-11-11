@@ -870,6 +870,35 @@ def create_optimizer(
             )
 
             patch_adafactor(optimizer, optimizer_config.stochastic_rounding)
+            
+        # ADAFusion Optimizer
+        case Optimizer.ADAFUSION:
+            from modules.util.optimizer.ADAFUSION import Adafusion
+
+            if optimizer_config.relative_step:
+                for parameter in parameters:
+                    if isinstance(parameter, dict) and 'lr' in parameter:
+                        parameter.pop('lr')
+
+            optimizer = Adafusion(
+                params=parameters,
+                lr=None if optimizer_config.relative_step is True else config.learning_rate,
+                eps=(optimizer_config.eps if optimizer_config.eps is not None else 1e-30,
+                     optimizer_config.eps2 if optimizer_config.eps2 is not None else 1e-3),
+                clip_threshold=optimizer_config.clip_threshold if optimizer_config.clip_threshold is not None else 1.0,
+                decay_rate=optimizer_config.decay_rate if optimizer_config.decay_rate is not None else -0.8,
+                # beta1=optimizer_config.beta1 if optimizer_config.beta1 is not None else None,
+                weight_decay=optimizer_config.weight_decay if optimizer_config.weight_decay is not None else 0.0,
+                scale_parameter=optimizer_config.scale_parameter if optimizer_config.scale_parameter is not None else True,
+                relative_step=optimizer_config.relative_step if optimizer_config.relative_step is not None else True,
+                warmup_init=optimizer_config.warmup_init if optimizer_config.warmup_init is not None else False,
+                # beta_res=optimizer_config.beta2 if optimizer_config.beta2 is not None else 0.999,
+                # slow_beta=optimizer_config.beta3 if optimizer_config.beta3 is not None else 0.9999,
+                # k=optimizer_config.k if optimizer_config.k is not None else 5,
+                # xi=optimizer_config.xi if optimizer_config.xi is not None else 1e-20,
+                # mix_alpha=optimizer_config.alpha if optimizer_config.alpha is not None else 5,
+                # stochastic_rounding=optimizer_config.stochastic_rounding if optimizer_config.stochastic_rounding is not None else False,
+            )
 
         # CAME Optimizer
         case Optimizer.CAME:
@@ -915,6 +944,24 @@ def create_optimizer(
                 fixed_decay=optimizer_config.fixed_decay if optimizer_config.fixed_decay is not None else False,
             )
 
+        # YOGI Optimizer
+        case Optimizer.YOGI:
+            from pytorch_optimizer.optimizer.yogi import Yogi
+            optimizer = Yogi(
+                params=parameters,
+                lr=config.learning_rate if config.learning_rate is not None else 0,
+                betas=(optimizer_config.beta1 if optimizer_config.beta1 is not None else 0.9,
+                       optimizer_config.beta2 if optimizer_config.beta2 is not None else 0.999),
+                initial_accumulator=optimizer_config.initial_accumulator if optimizer_config.initial_accumulator is not None else 1e-6,
+                weight_decay=optimizer_config.weight_decay if optimizer_config.weight_decay is not None else 0,
+                weight_decouple=optimizer_config.decoupled_decay if optimizer_config.decoupled_decay is not None else True,
+                fixed_decay=optimizer_config.fixed_decay if optimizer_config.fixed_decay is not None else False,
+                r=optimizer_config.r if optimizer_config.r is not None else 0.95,
+                adanorm=optimizer_config.adanorm if optimizer_config.adanorm is not None else False,
+                adam_debias=optimizer_config.adam_debias if optimizer_config.adam_debias is not None else False,
+                eps=optimizer_config.eps if optimizer_config.eps is not None else 1e-3,
+            )
+
         # AIDA Optimizer
         case Optimizer.AIDA:
             from pytorch_optimizer.optimizer.aida import Aida
@@ -950,6 +997,16 @@ def create_optimizer(
                 cautious=optimizer_config.cautious if optimizer_config.cautious is not None else False,
                 eps=optimizer_config.eps if optimizer_config.eps is not None else 1e-6,
             )
+    
+    # AIDA Optimizer Wrapper
+    if optimizer_config.enable_lookahead:
+        from pytorch_optimizer.optimizer.lookahead import Lookahead
+        optimizer = Lookahead(
+            optimizer,
+            k=optimizer_config.lookahead_k if optimizer_config.lookahead_k is not None else 5,
+            alpha=optimizer_config.lookahead_alpha if optimizer_config.lookahead_alpha is not None else 0.5,
+            pullback_momentum=optimizer_config.lookahead_pullback_momentum if optimizer_config.lookahead_pullback_momentum is not None else "none",
+        )
 
 
     if state_dict is not None and optimizer is not None:
@@ -1088,9 +1145,10 @@ def create_lr_scheduler(
 
         case LearningRateScheduler.ADAFACTOR:
             from transformers.optimization import AdafactorSchedule
+            base_optimizer = optimizer.optimizer if hasattr(optimizer, 'optimizer') else optimizer
             return AdafactorSchedule(
-                optimizer,
-                initial_lr=optimizer.state_dict()['param_groups'][0]['initial_lr'],
+                base_optimizer,
+                initial_lr=base_optimizer.state_dict()['param_groups'][0]['initial_lr'],
             )
         case LearningRateScheduler.CUSTOM:
             # Special case. Unlike the others, we return from here.

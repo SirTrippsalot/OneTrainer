@@ -55,6 +55,7 @@ class Optimizer(Enum):
 
     # ADAFACTOR
     ADAFACTOR = 'ADAFACTOR'
+    ADAFUSION = 'ADAFUSION'
 
     # CAME
     CAME = 'CAME'
@@ -62,6 +63,7 @@ class Optimizer(Enum):
     #Pytorch Optimizers
     ADABELIEF = 'ADABELIEF'
     TIGER = 'TIGER'
+    YOGI = 'YOGI'
     AIDA = 'AIDA'
 
     @property
