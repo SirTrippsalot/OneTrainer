@@ -4,14 +4,17 @@ from modules.util.bf16_stochastic_rounding import add_stochastic_
 from pytorch_optimizer.base.exception import NoSparseGradientError
 
 class Adafusion(torch.optim.Optimizer):
-    """Implements Adafusion: a hybrid adaptive optimizer combining Yogi-style variance control, Aida step suppression, stochastic rounding, confidence-guided strategies, unified Prodigy-style relative learning rate management, and dynamic adaptation inspired by Prodigy and Adabelief.
+    """Implements Adafusion: a comprehensive hybrid adaptive optimizer.
 
-    Adafusion is designed to provide a comprehensive approach to training optimization by incorporating multiple techniques:
-    - **Yogi-style variance adjustment**: Helps control the accumulation of second-order moments to ensure stability in long-term training.
-    - **Aida-style step suppression**: Dynamically controls the size of parameter updates to handle sudden gradient changes.
-    - **Stochastic rounding**: Enables rounding for BF16 precision, providing numerical stability in low-precision contexts.
-    - **Confidence-guided strategy**: Estimates the instability of updates to ensure robust parameter adjustments.
-    - **Selective Projection Decay (SPD)**: Controls the decay of updates by projecting them selectively, ensuring stability in optimization steps.
+    Adafusion is a sophisticated optimizer combining multiple advanced optimization techniques, including Yogi-style variance control, Aida-style step suppression, stochastic rounding, confidence-guided strategies, Selective Projection Decay (SPD), and dynamic adaptation inspired by AdaEMAMix.
+
+    Key features of Adafusion include:
+    - **Yogi-style variance adjustment**: Controls the accumulation of second-order moments to maintain stability during long-term training.
+    - **Aida-style step suppression**: Manages parameter update sizes dynamically to handle sudden changes in gradients.
+    - **Stochastic rounding**: Utilizes stochastic rounding for BF16 precision, improving numerical stability in low-precision environments.
+    - **CAME Confidence-guided strategy**: Estimates the instability of parameter updates to ensure robust adjustments.
+    - **Selective Projection Decay (SPD)**: Controls the decay of parameter updates selectively, promoting stability in optimization.
+    - **AdaEMAMix-inspired adaptation**: Incorporates techniques from AdaEMAMix to enhance the balance between faster adaptation and long-term stability.
 
     Arguments:
         params (iterable): Iterable of parameters to optimize or dicts defining parameter groups.
