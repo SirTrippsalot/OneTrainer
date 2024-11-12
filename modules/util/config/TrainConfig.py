@@ -100,6 +100,11 @@ class TrainOptimizerConfig(BaseConfig):
     lookahead_alpha: float
     lookahead_k: int
     lookahead_pullback_momentum: str
+    min_step: float
+    relative_step_scaling: bool
+    scaling_window: int
+    scaling_multiplier: float
+    scaling_adjustment: float
 
     def __init__(self, data: list[(str, Any, type, bool)]):
         super().__init__(data)
@@ -174,6 +179,11 @@ class TrainOptimizerConfig(BaseConfig):
         data.append(("lookahead_alpha", None, float, True))
         data.append(("lookahead_k", None, int, True))
         data.append(("lookahead_pullback_momentum", None, str, True))
+        data.append(("min_step", None, float, True))
+        data.append(("relative_step_scaling", False, bool, False))
+        data.append(("scaling_window", None, int, True))
+        data.append(("scaling_multiplier", None, float, True))
+        data.append(("scaling_adjustment", None, float, True))
         
 
         return TrainOptimizerConfig(data)

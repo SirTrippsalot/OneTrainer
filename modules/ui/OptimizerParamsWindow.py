@@ -149,7 +149,11 @@ class OptimizerParamsWindow(ctk.CTkToplevel):
             'lookahead_alpha': {'title': 'Lookahead Alpha', 'tooltip': 'Linear interpolation factor.', 'type': 'float'},
             'lookahead_k': {'title': 'lookahead_k', 'tooltip': 'Number of lookahead steps.', 'type': 'int'},
             'lookahead_pullback_momentum': {'title': 'Lookahead Pullback Momentum', 'tooltip': 'Change to inner optimizer momentum on interpolation update.[none | reset | pullback]', 'type': 'str'},
-
+            'min_step': {'title': 'Minimum Step Size', 'tooltip': 'Minimum step size for relative step. If left blank, the current behavior is maintained.', 'type': 'float'},
+            'relative_step_scaling': {'title': 'Relative Step Scaling', 'tooltip': 'Enables relative step scaling, modifying the learning rate based on recent trends in the last `scaling_window` steps.', 'type': 'bool'},
+            'scaling_window': {'title': 'Scaling Window', 'tooltip': 'Number of past steps to track for determining the trend in learning rate adjustments.', 'type': 'int'},
+            'scaling_multiplier': {'title': 'Scaling Multiplier', 'tooltip': 'Initial multiplier for scaling the learning rate during relative step scaling.', 'type': 'float'},
+            'scaling_adjustment': {'title': 'Scaling Adjustment', 'tooltip': 'Amount by which the scaling multiplier is incremented or decremented based on the trend of learning rate adjustments.', 'type': 'float'},
         }
         # @formatter:on
 
