@@ -15,6 +15,7 @@ class Adafusion(torch.optim.Optimizer):
     - **CAME Confidence-guided strategy**: Estimates the instability of parameter updates to ensure robust adjustments.
     - **Selective Projection Decay (SPD)**: Controls the decay of parameter updates selectively, promoting stability in optimization.
     - **AdaEMAMix-inspired adaptation**: Incorporates techniques from AdaEMAMix to enhance the balance between faster adaptation and long-term stability.
+    - **Lookahead integration**: Optionally applies Lookahead-style weight updates every `lookahead_k` steps, combining fast and slow weights for increased stability. Set `lookahead_k` to 0 to disable this functionality.
 
     Arguments:
         params (iterable): Iterable of parameters to optimize or dicts defining parameter groups.
@@ -36,6 +37,8 @@ class Adafusion(torch.optim.Optimizer):
         scaling_adjustment (float, optional): Amount by which the scaling multiplier is incremented or decremented based on the trend of learning rate adjustments (default: 0.01).
         k (int, optional): Number of vector projections per iteration in Aida-style step suppression (default: 2).
         xi (float, optional): Term used in vector projections to avoid division by zero in Aida-style step suppression (default: 1e-20).
+        lookahead_k (int, optional): Number of steps before applying Lookahead update. Set to 0 to disable Lookahead functionality (default: 5).
+        lookahead_alpha (float, optional): Interpolation factor for Lookahead updates between fast and slow weights. Controls the mixing of fast and slow parameters during the Lookahead update (default: 0.5).
     """
     def __init__(
         self,
@@ -57,7 +60,9 @@ class Adafusion(torch.optim.Optimizer):
         scaling_multiplier=1.0,
         scaling_adjustment=0.01,
         k=2,
-        xi=1e-20
+        xi=1e-20,
+        lookahead_k=5,
+        lookahead_alpha=0.5
     ):
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
@@ -81,24 +86,27 @@ class Adafusion(torch.optim.Optimizer):
             "scaling_multiplier": scaling_multiplier,
             "scaling_adjustment": scaling_adjustment,
             "k": k,
-            "xi": xi
+            "xi": xi,
+            "lookahead_k": lookahead_k,
+            "lookahead_alpha": lookahead_alpha,
+            "counter": 0
         }
-        super().__init__(params, defaults)
         self.stochastic_rounding = stochastic_rounding
+        super().__init__(params, defaults)
 
     @staticmethod
     def _get_lr(param_group, param_state):
-        d = param_state["scaling_multiplier"] if param_group["relative_step_scaling"] else 1.0
+        d = param_state.get("scaling_multiplier", 1.0) if param_group["relative_step_scaling"] else 1.0
         lr = param_group["lr"] if param_group["lr"] is not None else 1.0
         rel_step_sz = lr * d
         if param_group["relative_step"]:
-            min_step = param_group["min_step"] if param_group["min_step"] is not None else (1e-6 * param_state["step"] if param_group["warmup_init"] else 1e-2)
-            rel_step_sz = min(min_step, 1.0 / math.sqrt(param_state["step"])) * d
+            min_step = param_group["min_step"] if param_group["min_step"] is not None else (1e-6 * param_state.get("step", 1) if param_group["warmup_init"] else 1e-2)
+            rel_step_sz = min(min_step, 1.0 / math.sqrt(param_state.get("step", 1))) * d
 
-        # Apply parameter scaling if scale_parameter is enabled
+        
         param_scale = 1.0
         if param_group["scale_parameter"]:
-            param_scale = max(param_group["eps"][1], param_state["RMS"])
+            param_scale = max(param_group["eps"][1], param_state.get("RMS", 1.0))
         return param_scale * rel_step_sz
 
     @staticmethod
@@ -117,25 +125,30 @@ class Adafusion(torch.optim.Optimizer):
         return torch.mul(r_factor, c_factor)
 
     def _update_scaling_multiplier(self, param_state, param_group):
-        # Update the scaling multiplier based on recent LR trends
+        
+        if 'lr_history' not in param_state:
+            param_state['lr_history'] = []
+        if 'scaling_multiplier' not in param_state:
+            param_state['scaling_multiplier'] = param_group['scaling_multiplier']
+
         if len(param_state['lr_history']) >= param_group['scaling_window']:
             recent_lrs = param_state['lr_history'][-param_group['scaling_window']:]
             trend = [recent_lrs[i+1] - recent_lrs[i] for i in range(len(recent_lrs) - 1)]
             
             if all(x > 0 for x in trend):
-                # If the trend is consistently increasing, increase the scaling multiplier
+                
                 param_state['scaling_multiplier'] += param_group['scaling_adjustment']
-                param_state['lr_history'] = []  # Clear history after scaling change
+                param_state['lr_history'] = []  
             elif all(x < 0 for x in trend):
-                # If the trend is consistently decreasing, decrease the scaling multiplier
+                
                 param_state['scaling_multiplier'] = max(0.0, param_state['scaling_multiplier'] - param_group['scaling_adjustment'])
-                param_state['lr_history'] = []  # Clear history after scaling change
+                param_state['lr_history'] = []  
                 
     @torch.no_grad()
     def step_parameter(self, p, group, i):
         if p.grad is None:
             return
-        grad = p.grad
+        grad = p.grad.data
         if grad.dtype in {torch.float16, torch.bfloat16}:
             grad = grad.float()
         if grad.is_sparse:
@@ -145,41 +158,33 @@ class Adafusion(torch.optim.Optimizer):
         grad_shape = grad.shape
 
         factored = self._get_options(group, grad_shape)
-        if len(state) == 0:
-            state["step"] = 0
-            state["scaling_multiplier"] = group["scaling_multiplier"]
-            state['lr_history'] = []
 
-            # Always initialize exp_avg since confidence strategy requires it
-            state["exp_avg"] = torch.zeros_like(grad)
-            if factored:
-                state["exp_avg_sq_row"] = torch.zeros(grad_shape[:-1]).to(grad)
-                state["exp_avg_sq_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad)
-                state["exp_avg_slow_row"] = torch.zeros(grad_shape[:-1]).to(grad)
-                state["exp_avg_slow_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad)
-                state["exp_avg_res_row"] = torch.zeros(grad_shape[:-1]).to(grad)
-                state["exp_avg_res_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad)
-                state["pre"] = torch.zeros_like(p)
-            else:
-                state["exp_avg_sq"] = torch.zeros_like(grad)
-                state["exp_avg_slow"] = torch.zeros_like(grad)
-                state["exp_avg_res"] = torch.zeros_like(grad)
-                state["pre"] = torch.zeros_like(p)
+        def initialize_and_move(key, init_value):
+            if key not in state:
+                state[key] = init_value
+            elif isinstance(state[key], torch.Tensor):
+                state[key] = state[key].to(grad)
 
-            state["RMS"] = torch.zeros(1).to(grad)
+        
+        initialize_and_move("step", 0)
+        initialize_and_move("scaling_multiplier", group["scaling_multiplier"])
+        initialize_and_move('lr_history', [])
+        initialize_and_move("exp_avg", torch.zeros_like(grad))
+        initialize_and_move("RMS", torch.zeros(1).to(grad))
+
+        if factored:
+            initialize_and_move("exp_avg_sq_row", torch.zeros(grad_shape[:-1]).to(grad))
+            initialize_and_move("exp_avg_sq_col", torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad))
+            initialize_and_move("exp_avg_slow_row", torch.zeros(grad_shape[:-1]).to(grad))
+            initialize_and_move("exp_avg_slow_col", torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad))
+            initialize_and_move("exp_avg_res_row", torch.zeros(grad_shape[:-1]).to(grad))
+            initialize_and_move("exp_avg_res_col", torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad))
+            initialize_and_move("pre", torch.zeros_like(p))
         else:
-            state["exp_avg"] = state["exp_avg"].to(grad)
-            if factored:
-                state["exp_avg_sq_row"] = state["exp_avg_sq_row"].to(grad)
-                state["exp_avg_sq_col"] = state["exp_avg_sq_col"].to(grad)
-                state["exp_avg_slow_row"] = state["exp_avg_slow_row"].to(grad)
-                state["exp_avg_slow_col"] = state["exp_avg_slow_col"].to(grad)
-                state["exp_avg_res_row"] = state["exp_avg_res_row"].to(grad)
-                state["exp_avg_res_col"] = state["exp_avg_res_col"].to(grad)
-            else:
-                state["exp_avg_sq"] = state["exp_avg_sq"].to(grad)
-                state["exp_avg_slow"] = state["exp_avg_slow"].to(grad)
-                state["exp_avg_res"] = state["exp_avg_res"].to(grad)
+            initialize_and_move("exp_avg_sq", torch.zeros_like(grad))
+            initialize_and_move("exp_avg_slow", torch.zeros_like(grad))
+            initialize_and_move("exp_avg_res", torch.zeros_like(grad))
+            initialize_and_move("pre", torch.zeros_like(p))
 
         p_data_fp32 = p
         if p.dtype in {torch.float16, torch.bfloat16}:
@@ -189,7 +194,9 @@ class Adafusion(torch.optim.Optimizer):
         state["RMS"] = self._rms(p_data_fp32)
         lr = self._get_lr(group, state)
 
-        # Track learning rate for scaling adjustment
+        
+        if 'lr_history' not in state:
+            state['lr_history'] = []
         state['lr_history'].append(lr)
         if len(state['lr_history']) > group['scaling_window']:
             state['lr_history'] = state['lr_history'][-group['scaling_window']:]
@@ -212,16 +219,16 @@ class Adafusion(torch.optim.Optimizer):
             exp_avg_sq_row.mul_(beta2t).addcmul_((exp_avg_sq_row - update.mean(dim=-1)).sign_(), update.mean(dim=-1), value=-(1.0 - beta2t))
             exp_avg_sq_col.mul_(beta2t).addcmul_((exp_avg_sq_col - update.mean(dim=-2)).sign_(), update.mean(dim=-2), value=-(1.0 - beta2t))
 
-            # Apply Yogi-style variance adjustment to slow EMA
+            
             exp_avg_slow_row.mul_(beta3).addcmul_((exp_avg_slow_row - update.mean(dim=-1)).sign_(), update.mean(dim=-1), value=-(1.0 - beta3))
             exp_avg_slow_col.mul_(beta3).addcmul_((exp_avg_slow_col - update.mean(dim=-2)).sign_(), update.mean(dim=-2), value=-(1.0 - beta3))
 
-            # Confidence-guided strategy: Calculate instability
+            
             res = (update - exp_avg_sq_row.mean()) ** 2 + group["eps"][1]
             exp_avg_res_row.mul_(beta3).addcmul_((exp_avg_res_row - res.mean(dim=-1)).sign_(), res.mean(dim=-1), value=-(1.0 - beta3))
             exp_avg_res_col.mul_(beta3).addcmul_((exp_avg_res_col - res.mean(dim=-2)).sign_(), res.mean(dim=-2), value=-(1.0 - beta3))
 
-            # Approximation of exponential moving average of instability
+            
             res_approx = self._approx_sq_grad(exp_avg_res_row, exp_avg_res_col)
             update = res_approx.mul_(grad)
 
@@ -235,14 +242,14 @@ class Adafusion(torch.optim.Optimizer):
             exp_avg_sq.mul_(beta2t).addcmul_((exp_avg_sq - update).sign_(), update, value=-(1.0 - beta2t))
             exp_avg_slow.mul_(beta3).addcmul_((exp_avg_slow - update).sign_(), update, value=-(1.0 - beta3))
             
-            # Confidence-guided strategy: Calculate instability
+            
             res = (update - exp_avg_sq.mean()) ** 2 + group["eps"][1]
             exp_avg_res.mul_(beta3).addcmul_((exp_avg_res - res).sign_(), res, value=-(1.0 - beta3))
             update = exp_avg_sq.rsqrt().mul_(grad)
 
-        # Aida-style Step Suppression with Projections
-        proj_g = grad.detach().clone().float().to(p.device)  # Ensure it is float32 and on the correct device
-        proj_m = state["exp_avg"].detach().clone().float().to(p.device)  # Ensure it is float32 and on the correct device
+        
+        proj_g = grad.detach().clone().float().to(p.device)  
+        proj_m = state["exp_avg"].detach().clone().float().to(p.device)  
 
         for _ in range(group["k"]):
             proj_sum_gm = torch.sum(torch.mul(proj_g, proj_m))
@@ -250,8 +257,8 @@ class Adafusion(torch.optim.Optimizer):
             scalar_g = proj_sum_gm / (torch.sum(torch.pow(proj_g, 2)).add(group["xi"]))
             scalar_m = proj_sum_gm / (torch.sum(torch.pow(proj_m, 2)).add(group["xi"]))
 
-            proj_g = proj_g * scalar_g  # Replace in-place with out-of-place
-            proj_m = proj_m * scalar_m  # Replace in-place with out-of-place
+            proj_g = proj_g * scalar_g  
+            proj_m = proj_m * scalar_m  
 
         grad_residual = proj_m - proj_g
         if factored:
@@ -267,7 +274,7 @@ class Adafusion(torch.optim.Optimizer):
         exp_avg.mul_(beta1).add_(update, alpha=(1 - beta1))
         update = exp_avg + group["alpha"] * (exp_avg_slow_row.mean() + exp_avg_slow_col.mean())
 
-        # Selective Projection Decay (SPD)
+        
         pre = state["pre"]
         condition = - torch.sum(torch.mul(grad, p_data_fp32 - pre))
         if condition < 0.0:
@@ -284,6 +291,18 @@ class Adafusion(torch.optim.Optimizer):
             add_stochastic_(p, p_data_fp32)
         if p.dtype in {torch.float16, torch.bfloat16}:
             p.copy_(p_data_fp32)
+
+        
+        if group['lookahead_k'] > 0:
+            group['counter'] += 1
+            if group['counter'] >= group['lookahead_k']:
+                group['counter'] = 0
+                if "exp_avg" in state and "exp_avg_slow" in state:
+                    
+                    state["RMS"] = state["RMS"].detach().clone()
+                    lookahead_alpha = group['lookahead_alpha']
+                    state["exp_avg"].mul_(lookahead_alpha).add_(state["exp_avg_slow"], alpha=(1 - lookahead_alpha))
+                    state["exp_avg_slow"].copy_(state["exp_avg"])
 
     def _ratio(self, new_p, param, pre):
         curr_norm, prev_norm = torch.norm(new_p - pre), torch.norm(param - pre)
