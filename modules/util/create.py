@@ -899,10 +899,10 @@ def create_optimizer(
                 alpha=optimizer_config.alpha if optimizer_config.alpha is not None else 5,
                 stochastic_rounding=optimizer_config.stochastic_rounding if optimizer_config.stochastic_rounding is not None else False,
                 min_step=optimizer_config.min_step if optimizer_config.min_step is not None else None,
-                relative_step_scaling=optimizer_config.relative_step_scaling if optimizer_config.relative_step_scaling is not None else False,
-                scaling_window=optimizer_config.scaling_window if optimizer_config.scaling_window is not None else 5,
-                scaling_multiplier=optimizer_config.scaling_multiplier if optimizer_config.scaling_multiplier is not None else 1.0,
-                scaling_adjustment=optimizer_config.scaling_adjustment if optimizer_config.scaling_adjustment is not None else 0.01,
+                # relative_step_scaling=optimizer_config.relative_step_scaling if optimizer_config.relative_step_scaling is not None else False,
+                # scaling_window=optimizer_config.scaling_window if optimizer_config.scaling_window is not None else 5,
+                # scaling_multiplier=optimizer_config.scaling_multiplier if optimizer_config.scaling_multiplier is not None else 1.0,
+                # scaling_adjustment=optimizer_config.scaling_adjustment if optimizer_config.scaling_adjustment is not None else 0.01,
             )
 
         # CAME Optimizer
@@ -1003,7 +1003,7 @@ def create_optimizer(
                 eps=optimizer_config.eps if optimizer_config.eps is not None else 1e-6,
             )
     
-    # AIDA Optimizer Wrapper
+    # Lookahead Optimizer Wrapper
     if optimizer_config.enable_lookahead:
         from pytorch_optimizer.optimizer.lookahead import Lookahead
         optimizer = Lookahead(

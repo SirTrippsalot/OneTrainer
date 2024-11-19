@@ -567,6 +567,7 @@ OPTIMIZER_DEFAULT_PARAMETERS = {
         "k": 5,
         "xi": 1e-20,
         "alpha": 5,
+        "fused_back_pass": False,
         "enable_lookahead": False,
         "lookahead_alpha": 0.5,
         "lookahead_k": 5,

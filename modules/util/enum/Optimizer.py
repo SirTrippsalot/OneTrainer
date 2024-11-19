@@ -90,6 +90,7 @@ class Optimizer(Enum):
             Optimizer.CAME,
             Optimizer.ADAM,
             Optimizer.ADAMW,
+            Optimizer.ADAFUSION,
         ]
 
     # Small helper for adjusting learning rates to adaptive optimizers.

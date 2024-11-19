@@ -712,7 +712,12 @@ class GenericTrainer(BaseTrainer):
                             self.model.optimizer.step()
 
                             # Calculate the current gradient norm
-                            total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in self.parameters if p.grad is not None]), 2).item()
+                            total_norm = (torch.norm(torch.stack([
+                                torch.norm(p.grad.detach(), 2)
+                                for p in self.parameters
+                                if p.grad is not None
+                            ]), 2).item() if any(p.grad is not None for p in self.parameters) else 0.0)
+
 
                             # Initialize or update EMA of gradient norms
                             if ema_gradient is None:
