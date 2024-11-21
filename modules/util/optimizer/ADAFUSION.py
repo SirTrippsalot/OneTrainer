@@ -114,8 +114,6 @@ class Adafusion(torch.optim.Optimizer):
         if p.grad is None:
             return
         grad = p.grad
-        if grad.dtype in {torch.float16, torch.bfloat16}:
-            grad = grad.float()
         if grad.is_sparse:
             raise RuntimeError("Adafusion does not support sparse gradients.")
 
@@ -127,47 +125,46 @@ class Adafusion(torch.optim.Optimizer):
         # State Initialization
         if len(state) == 0:
             state["step"] = 0
-            state["exp_avg"] = torch.zeros_like(grad)
-            state["RMS"] = torch.zeros(1).to(grad)
+            state["exp_avg"] = torch.zeros_like(grad, dtype=p.dtype)
+            state["RMS"] = torch.zeros(1).to(grad).to(p.dtype)
 
             if factored:
-                state["exp_avg_sq_row"] = torch.zeros(grad_shape[:-1]).type_as(grad)
-                state["exp_avg_sq_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).type_as(grad)
-                state["exp_avg_slow_row"] = torch.zeros(grad_shape[:-1]).type_as(grad)
-                state["exp_avg_slow_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).type_as(grad)
-                state["exp_avg_res_row"] = torch.zeros(grad_shape[:-1]).type_as(grad)
-                state["exp_avg_res_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).type_as(grad)
-                state["pre"] = torch.zeros_like(p)
+                state["exp_avg_sq_row"] = torch.zeros(grad_shape[:-1], dtype=p.dtype).type_as(grad)
+                state["exp_avg_sq_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:], dtype=p.dtype).type_as(grad)
+                state["exp_avg_slow_row"] = torch.zeros(grad_shape[:-1], dtype=p.dtype).type_as(grad)
+                state["exp_avg_slow_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:], dtype=p.dtype).type_as(grad)
+                state["exp_avg_res_row"] = torch.zeros(grad_shape[:-1], dtype=p.dtype).type_as(grad)
+                state["exp_avg_res_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:], dtype=p.dtype).type_as(grad)
+                state["pre"] = torch.zeros_like(p, dtype=p.dtype)
             else:
-                state["exp_avg_sq"] = torch.zeros_like(grad)
-                state["exp_avg_slow"] = torch.zeros_like(grad)
-                state["exp_avg_res"] = torch.zeros_like(grad)
-                state["pre"] = torch.zeros_like(p)
+                state["exp_avg_sq"] = torch.zeros_like(grad, dtype=p.dtype)
+                state["exp_avg_slow"] = torch.zeros_like(grad, dtype=p.dtype)
+                state["exp_avg_res"] = torch.zeros_like(grad, dtype=p.dtype)
+                state["pre"] = torch.zeros_like(p, dtype=p.dtype)
         else:
             # Move tensors to appropriate device
             for key in state:
                 if isinstance(state[key], torch.Tensor):
                     state[key] = state[key].to(grad.device)
 
-        p_data_fp32 = p
-        if p.dtype in {torch.float16, torch.bfloat16}:
-            p_data_fp32 = p_data_fp32.float()
+        p_data_fp32 = p.to(torch.float32)
+        grad_fp32 = grad.to(torch.float32)
 
         state["step"] += 1
-        state["RMS"] = self._rms(p_data_fp32)
+        state["RMS"] = self._rms(p_data_fp32).to(p.dtype)
         lr = self._get_lr(group, state)
 
         beta1, beta2, beta3 = group["betas"]
         beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
-        update = (grad ** 2) + group["eps"][0]
+        update = (grad_fp32 ** 2) + group["eps"][0]
         
         if factored:
-            exp_avg_sq_row = state["exp_avg_sq_row"]
-            exp_avg_sq_col = state["exp_avg_sq_col"]
-            exp_avg_slow_row = state["exp_avg_slow_row"]
-            exp_avg_slow_col = state["exp_avg_slow_col"]
-            exp_avg_res_row = state["exp_avg_res_row"]
-            exp_avg_res_col = state["exp_avg_res_col"]
+            exp_avg_sq_row = state["exp_avg_sq_row"].to(torch.float32)
+            exp_avg_sq_col = state["exp_avg_sq_col"].to(torch.float32)
+            exp_avg_slow_row = state["exp_avg_slow_row"].to(torch.float32)
+            exp_avg_slow_col = state["exp_avg_slow_col"].to(torch.float32)
+            exp_avg_res_row = state["exp_avg_res_row"].to(torch.float32)
+            exp_avg_res_col = state["exp_avg_res_col"].to(torch.float32)
 
             exp_avg_sq_row.mul_(beta2t).addcmul_((exp_avg_sq_row - update.mean(dim=-1)).sign_(), update.mean(dim=-1), value=-(1.0 - beta2t))
             exp_avg_sq_col.mul_(beta2t).addcmul_((exp_avg_sq_col - update.mean(dim=-2)).sign_(), update.mean(dim=-2), value=-(1.0 - beta2t))
@@ -180,24 +177,24 @@ class Adafusion(torch.optim.Optimizer):
             exp_avg_res_col.mul_(beta3).addcmul_((exp_avg_res_col - res.mean(dim=-2)).sign_(), res.mean(dim=-2), value=-(1.0 - beta3))
 
             res_approx = self._approx_sq_grad(exp_avg_res_row, exp_avg_res_col)
-            update = res_approx.mul_(grad)
+            update = res_approx.mul_(grad_fp32)
 
             update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
-            update.mul_(grad)
+            update.mul_(grad_fp32)
         else:
-            exp_avg_sq = state["exp_avg_sq"]
-            exp_avg_slow = state["exp_avg_slow"]
-            exp_avg_res = state["exp_avg_res"]
+            exp_avg_sq = state["exp_avg_sq"].to(torch.float32)
+            exp_avg_slow = state["exp_avg_slow"].to(torch.float32)
+            exp_avg_res = state["exp_avg_res"].to(torch.float32)
 
             exp_avg_sq.mul_(beta2t).addcmul_((exp_avg_sq - update).sign_(), update, value=-(1.0 - beta2t))
             exp_avg_slow.mul_(beta3).addcmul_((exp_avg_slow - update).sign_(), update, value=-(1.0 - beta3))
 
             res = (update - exp_avg_sq.mean()) ** 2 + group["eps"][1]
             exp_avg_res.mul_(beta3).addcmul_((exp_avg_res - res).sign_(), res, value=-(1.0 - beta3))
-            update = exp_avg_sq.rsqrt().mul_(grad)
+            update = exp_avg_sq.rsqrt().mul_(grad_fp32)
 
-        proj_g = grad.detach().clone().float().to(p.device)  
-        proj_m = state["exp_avg"].detach().clone().float().to(p.device)  
+        proj_g = grad_fp32.detach().clone().to(p.device)  
+        proj_m = state["exp_avg"].to(torch.float32).detach().clone().to(p.device)  
 
         for _ in range(group["k"]):
             proj_sum_gm = torch.sum(torch.mul(proj_g, proj_m))
@@ -218,7 +215,7 @@ class Adafusion(torch.optim.Optimizer):
         update.div_((self._rms(update) / group["clip_threshold"]).clamp_(min=1.0))
         update.mul_(lr)
 
-        exp_avg = state["exp_avg"]
+        exp_avg = state["exp_avg"].to(torch.float32)
         exp_avg.mul_(beta1).add_(update, alpha=(1 - beta1))
         
         if factored:
@@ -226,8 +223,8 @@ class Adafusion(torch.optim.Optimizer):
         else:
             update = exp_avg + group["alpha"] * exp_avg_slow.mean()
         
-        pre = state["pre"]
-        condition = - torch.sum(torch.mul(grad, p_data_fp32 - pre))
+        pre = state["pre"].to(torch.float32)
+        condition = - torch.sum(torch.mul(grad_fp32, p_data_fp32 - pre))
         if condition < 0.0:
             ratio = self._ratio(p_data_fp32 - update, p_data_fp32, pre)
             update = update - group["weight_decay"] * ratio * (p_data_fp32 - pre)
@@ -236,20 +233,20 @@ class Adafusion(torch.optim.Optimizer):
             p_data_fp32.add_(p_data_fp32, alpha=(-group["weight_decay"] * lr))
 
         p_data_fp32.add_(-update)
-        state["pre"] = p_data_fp32.clone()
+        p.copy_(p_data_fp32.to(p.dtype))
+        state["pre"] = p_data_fp32.clone().to(p.dtype)
 
         if p.dtype == torch.bfloat16 and self.stochastic_rounding:
             add_stochastic_(p, p_data_fp32)
-        if p.dtype in {torch.float16, torch.bfloat16}:
-            p.copy_(p_data_fp32)
+        
 
         if group['lookahead_k'] > 0:
             if state['step'] % group['lookahead_k'] == 0:
                 if "exp_avg" in state and "exp_avg_slow" in state:
                     state["RMS"] = state["RMS"].detach().clone()
                     lookahead_alpha = group['lookahead_alpha']
-                    state["exp_avg"].mul_(lookahead_alpha).add_(state["exp_avg_slow"], alpha=(1 - lookahead_alpha))
-                    state["exp_avg_slow"].copy_(state["exp_avg"])
+                    state["exp_avg"].mul_(lookahead_alpha).add_(state["exp_avg_slow"].to(torch.float32), alpha=(1 - lookahead_alpha))
+                    state["exp_avg_slow"].copy_(state["exp_avg"].to(p.dtype))
 
     def _ratio(self, new_p, param, pre):
         curr_norm, prev_norm = torch.norm(new_p - pre), torch.norm(param - pre)
