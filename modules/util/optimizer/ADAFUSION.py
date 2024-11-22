@@ -6,7 +6,7 @@ from pytorch_optimizer.base.exception import NoSparseGradientError
 class Adafusion(torch.optim.Optimizer):
     """Implements Adafusion: a comprehensive hybrid adaptive optimizer.
 
-    Adafusion is a sophisticated optimizer combining multiple advanced optimization techniques, including Yogi-style variance control, Aida-style step suppression, stochastic rounding, confidence-guided strategies, Selective Projection Decay (SPD), and dynamic adaptation inspired by AdaEMAMix.
+    Adafusion is a sophisticated optimizer combining multiple advanced optimization techniques, including Yogi-style variance control, Aida-style step suppression, stochastic rounding, confidence-guided strategies, Selective Projection Decay (SPD), dynamic adaptation inspired by AdaEMAMix, and the convergence properties inspired by ADOPT.
 
     Key features of Adafusion include:
     - **Yogi-style variance adjustment**: Controls the accumulation of second-order moments to maintain stability during long-term training.
@@ -15,6 +15,7 @@ class Adafusion(torch.optim.Optimizer):
     - **CAME Confidence-guided strategy**: Estimates the instability of parameter updates to ensure robust adjustments.
     - **Selective Projection Decay (SPD)**: Controls the decay of parameter updates selectively, promoting stability in optimization.
     - **AdaEMAMix-inspired adaptation**: Incorporates techniques from AdaEMAMix to enhance the balance between faster adaptation and long-term stability.
+    - **ADOPT-inspired variance reduction**: Modifies second moment estimates by removing the current gradient from the accumulation, achieving robust convergence across different conditions.
     - **Lookahead integration**: Optionally applies Lookahead-style weight updates every `lookahead_k` steps, combining fast and slow weights for increased stability. Set `lookahead_k` to 0 to disable this functionality.
 
     Arguments:
@@ -122,7 +123,6 @@ class Adafusion(torch.optim.Optimizer):
 
         factored = self._get_options(group, grad_shape)
 
-        # State Initialization
         if len(state) == 0:
             state["step"] = 0
             state["exp_avg"] = torch.zeros_like(grad, dtype=p.dtype)
@@ -142,7 +142,6 @@ class Adafusion(torch.optim.Optimizer):
                 state["exp_avg_res"] = torch.zeros_like(grad, dtype=p.dtype)
                 state["pre"] = torch.zeros_like(p, dtype=p.dtype)
         else:
-            # Move tensors to appropriate device
             for key in state:
                 if isinstance(state[key], torch.Tensor):
                     state[key] = state[key].to(grad.device)
@@ -157,6 +156,9 @@ class Adafusion(torch.optim.Optimizer):
         beta1, beta2, beta3 = group["betas"]
         beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
         update = (grad_fp32 ** 2) + group["eps"][0]
+        
+        bias_correction1 = 1 - beta1 ** state["step"]
+        bias_correction2 = 1 - beta2 ** state["step"]
         
         if factored:
             exp_avg_sq_row = state["exp_avg_sq_row"].to(torch.float32)
@@ -181,6 +183,7 @@ class Adafusion(torch.optim.Optimizer):
 
             update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
             update.mul_(grad_fp32)
+            update = update / math.sqrt(bias_correction2)
         else:
             exp_avg_sq = state["exp_avg_sq"].to(torch.float32)
             exp_avg_slow = state["exp_avg_slow"].to(torch.float32)
@@ -192,6 +195,13 @@ class Adafusion(torch.optim.Optimizer):
             res = (update - exp_avg_sq.mean()) ** 2 + group["eps"][1]
             exp_avg_res.mul_(beta3).addcmul_((exp_avg_res - res).sign_(), res, value=-(1.0 - beta3))
             update = exp_avg_sq.rsqrt().mul_(grad_fp32)
+
+            if state["step"] > 1:
+                denom = exp_avg_sq.rsqrt().clamp(min=group["eps"][1])
+                update.div_(denom)
+
+            update = update / math.sqrt(bias_correction2)
+
 
         proj_g = grad_fp32.detach().clone().to(p.device)  
         proj_m = state["exp_avg"].to(torch.float32).detach().clone().to(p.device)  
@@ -217,6 +227,7 @@ class Adafusion(torch.optim.Optimizer):
 
         exp_avg = state["exp_avg"].to(torch.float32)
         exp_avg.mul_(beta1).add_(update, alpha=(1 - beta1))
+        exp_avg = exp_avg / bias_correction1
         
         if factored:
             update = exp_avg + group["alpha"] * (exp_avg_slow_row.mean() + exp_avg_slow_col.mean())
