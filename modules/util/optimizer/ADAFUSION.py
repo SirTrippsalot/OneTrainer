@@ -17,12 +17,14 @@ class Adafusion(torch.optim.Optimizer):
     - **AdaEMAMix-inspired adaptation**: Incorporates techniques from AdaEMAMix to enhance the balance between faster adaptation and long-term stability.
     - **ADOPT-inspired variance reduction**: Modifies second moment estimates by removing the current gradient from the accumulation, achieving robust convergence across different conditions.
     - **Lookahead integration**: Optionally applies Lookahead-style weight updates every `lookahead_k` steps, combining fast and slow weights for increased stability. Set `lookahead_k` to 0 to disable this functionality.
+    - **AutoClipper integration**: Optional gradient clipping based on percentile statistics to control gradient magnitudes dynamically during training.
 
     Arguments:
         params (iterable): Iterable of parameters to optimize or dicts defining parameter groups.
         lr (float, optional): External learning rate. Typically left as `None` if using relative or unified relative step approach.
         eps (Tuple[float, float], optional): Regularization constants for stabilizing the update computations. The first value regularizes the square gradient, and the second regularizes the parameter scaling (default: (1e-30, 0.001)).
         clip_threshold (float, optional): Threshold value to clip the root mean square of the final gradient update, which prevents overly large updates and ensures numerical stability (default: 1.0).
+        clip_updates (bool, optional): Whether to apply **Update Clipping** based on `clip_threshold`. This is distinct from Gradient Clipping and is not recommended to use both simultaneously. **Update Clipping** ensures the magnitude of parameter updates is controlled (default: True).
         decay_rate (float, optional): Coefficient for computing running averages of squared gradients. Controls the decay of past gradients in Yogi-style variance adjustment (default: -0.8).
         betas (Tuple[float, float, float], optional): Coefficients used for computing running averages of gradient, squared gradient, and slow exponential moving average (EMA) respectively. These coefficients control the balance between past and new gradient information (default: (0.9, 0.999, 0.9999)).
         weight_decay (float, optional): Weight decay (L2 penalty). Used to prevent overfitting by adding a penalty proportional to the size of the parameters (default: 0).
@@ -36,6 +38,9 @@ class Adafusion(torch.optim.Optimizer):
         xi (float, optional): Term used in vector projections to avoid division by zero in Aida-style step suppression (default: 1e-20).
         lookahead_k (int, optional): Number of steps before applying Lookahead update. Set to 0 to disable Lookahead functionality (default: 5).
         lookahead_alpha (float, optional): Interpolation factor for Lookahead updates between fast and slow weights. Controls the mixing of fast and slow parameters during the Lookahead update (default: 0.5).
+        autoclipper (bool, optional): Enable AutoClipper gradient clipping based on percentile (default: False).
+        clip_percentile (float, optional): Percentile for AutoClipper (only used if `autoclipper=True`) (default: 10).
+        history_size (int, optional): Number of gradient norms to retain for percentile calculation (default: 10000).
     """
     def __init__(
         self,
@@ -43,6 +48,7 @@ class Adafusion(torch.optim.Optimizer):
         lr=None,
         eps=(1e-30, 1e-3),
         clip_threshold=1.0,
+        clip_updates=False,
         decay_rate=-0.8,
         betas=(0.9, 0.999, 0.9999),
         weight_decay=0.0,
@@ -55,7 +61,10 @@ class Adafusion(torch.optim.Optimizer):
         k=2,
         xi=1e-20,
         lookahead_k=5,
-        lookahead_alpha=0.5
+        lookahead_alpha=0.5,
+        autoclipper=True,
+        clip_percentile=10,
+        history_size=10000
     ):
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
@@ -66,6 +75,7 @@ class Adafusion(torch.optim.Optimizer):
             "lr": lr,
             "eps": eps,
             "clip_threshold": clip_threshold,
+            "clip_updates": clip_updates,
             "decay_rate": decay_rate,
             "betas": betas,
             "weight_decay": weight_decay,
@@ -77,9 +87,20 @@ class Adafusion(torch.optim.Optimizer):
             "k": k,
             "xi": xi,
             "lookahead_k": lookahead_k,
-            "lookahead_alpha": lookahead_alpha
+            "lookahead_alpha": lookahead_alpha,
+            "autoclipper": autoclipper,
+            "clip_percentile": clip_percentile,
+            "history_size": history_size
         }
         self.stochastic_rounding = stochastic_rounding
+        self.autoclipper_enabled = autoclipper
+
+        if autoclipper:
+            self.grad_history = torch.zeros(history_size, dtype=torch.float32)
+            self.history_index = 0
+            self.history_size = history_size
+            self.clip_percentile = clip_percentile
+
         super().__init__(params, defaults)
 
     @staticmethod
@@ -110,10 +131,39 @@ class Adafusion(torch.optim.Optimizer):
         c_factor = exp_avg_sq_col.unsqueeze(-2).rsqrt()
         return torch.mul(r_factor, c_factor)
 
+    def _update_grad_history(self, total_norm):
+        assign_idx = self.history_index % self.history_size
+        self.grad_history[assign_idx] = total_norm
+        self.history_index += 1
+
+    def _compute_clip_value(self):
+        history_size = min(self.history_index, self.history_size)
+        return torch.quantile(self.grad_history[:history_size], self.clip_percentile / 100.0)
+
+    def _apply_autoclipper(self, group):
+        grad_norms = []
+        for p in group["params"]:
+            if p.grad is not None:
+                grad_norms.append(p.grad.norm().item())
+
+        if not grad_norms:
+            return
+
+        total_norm = torch.norm(torch.tensor(grad_norms, dtype=torch.float32))
+        self._update_grad_history(total_norm)
+
+        clip_value = self._compute_clip_value()
+        for p in group["params"]:
+            if p.grad is not None:
+                p.grad.data = torch.nn.utils.clip_grad_norm_(p.grad, clip_value)
+
     @torch.no_grad()
     def step_parameter(self, p, group, i):
         if p.grad is None:
             return
+        if self.autoclipper_enabled:
+            self._apply_autoclipper(group)
+
         grad = p.grad
         if grad.is_sparse:
             raise RuntimeError("Adafusion does not support sparse gradients.")
@@ -222,7 +272,8 @@ class Adafusion(torch.optim.Optimizer):
         else:
             exp_avg_sq.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1.0 - beta2)
 
-        update.div_((self._rms(update) / group["clip_threshold"]).clamp_(min=1.0))
+        if group["clip_updates"]:
+            update.div_((self._rms(update) / group["clip_threshold"]).clamp_(min=1.0))
         update.mul_(lr)
 
         exp_avg = state["exp_avg"].to(torch.float32)
