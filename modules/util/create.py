@@ -1004,14 +1004,14 @@ def create_optimizer(
             )
     
     # Lookahead Optimizer Wrapper
-    if optimizer_config.enable_lookahead:
-        from pytorch_optimizer.optimizer.lookahead import Lookahead
-        optimizer = Lookahead(
-            optimizer,
-            k=optimizer_config.lookahead_k if optimizer_config.lookahead_k is not None else 5,
-            alpha=optimizer_config.lookahead_alpha if optimizer_config.lookahead_alpha is not None else 0.5,
-            pullback_momentum=optimizer_config.lookahead_pullback_momentum if optimizer_config.lookahead_pullback_momentum is not None else "none",
-        )
+    # if optimizer_config.enable_lookahead:
+        # from pytorch_optimizer.optimizer.lookahead import Lookahead
+        # optimizer = Lookahead(
+            # optimizer,
+            # k=optimizer_config.lookahead_k if optimizer_config.lookahead_k is not None else 5,
+            # alpha=optimizer_config.lookahead_alpha if optimizer_config.lookahead_alpha is not None else 0.5,
+            # pullback_momentum=optimizer_config.lookahead_pullback_momentum if optimizer_config.lookahead_pullback_momentum is not None else "none",
+        # )
 
 
     if state_dict is not None and optimizer is not None:

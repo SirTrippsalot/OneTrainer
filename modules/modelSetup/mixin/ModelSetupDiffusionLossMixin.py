@@ -142,15 +142,21 @@ class ModelSetupDiffusionLossMixin(metaclass=ABCMeta):
     ):
         losses = 0
 
+        def pseudo_huber_loss(pred, target, delta=1.0):
+            error = pred - target
+            return (delta**2 * (torch.sqrt(1 + (error / delta)**2) - 1)).mean([1, 2, 3])
+
         mean_dim = list(range(1, data['predicted'].ndim))
 
         # MSE/L2 Loss
         if config.mse_strength != 0:
-            losses += F.mse_loss(
+            losses += pseudo_huber_loss(
                 data['predicted'].to(dtype=torch.float32),
                 data['target'].to(dtype=torch.float32),
+                delta=1.0  # You can experiment with values like 0.5, 1.0, or 2.0
                 reduction='none'
             ).mean(mean_dim) * config.mse_strength
+
 
         # MAE/L1 Loss
         if config.mae_strength != 0:
@@ -290,7 +296,22 @@ class ModelSetupDiffusionLossMixin(metaclass=ABCMeta):
             v_pred = data.get('prediction_type', '') == 'v_prediction'
             match config.loss_weight_fn:
                 case LossWeight.MIN_SNR_GAMMA:
-                    losses *= self.__min_snr_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+                    # losses *= self.__min_snr_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+                    # Compute individual weights
+                    min_snr_weight = self.__min_snr_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+                    debiased_weight = self.__debiased_estimation_weight(data['timestep'], v_pred, losses.device)
+                    p2_weight = self.__p2_loss_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+
+                    # Combine weights (adjust ratios as needed)
+                    alpha = 0.35  # e.g., 0.4 for Min SNR Gamma
+                    beta = 0.2  # e.g., 0.4 for Debiased
+                    gamma = 1 - (alpha + beta)           # Remaining weight for P2 (e.g., 0.2)
+
+                    # Ensure alpha + beta + gamma = 1
+                    eps = 1e-8  # to avoid log(0) issues
+                    hybrid_weight = alpha * min_snr_weight + beta * debiased_weight + gamma * p2_weight
+
+                    losses *= hybrid_weight
                 case LossWeight.DEBIASED_ESTIMATION:
                     losses *= self.__debiased_estimation_weight(data['timestep'], v_pred, losses.device)
                 case LossWeight.P2:
