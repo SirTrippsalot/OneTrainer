@@ -875,11 +875,6 @@ def create_optimizer(
         case Optimizer.ADAFUSION:
             from modules.util.optimizer.ADAFUSION import Adafusion
 
-            if optimizer_config.relative_step:
-                for parameter in parameters:
-                    if isinstance(parameter, dict) and 'lr' in parameter:
-                        parameter.pop('lr')
-
             optimizer = Adafusion(
                 params=parameters,
                 lr=None if optimizer_config.relative_step is True else config.learning_rate,
@@ -891,18 +886,30 @@ def create_optimizer(
                        optimizer_config.beta2 if optimizer_config.beta2 is not None else 0.999,
                        optimizer_config.beta3 if optimizer_config.beta3 is not None else 0.9999),
                 weight_decay=optimizer_config.weight_decay if optimizer_config.weight_decay is not None else 0.0,
-                scale_parameter=optimizer_config.scale_parameter if optimizer_config.scale_parameter is not None else True,
-                relative_step=optimizer_config.relative_step if optimizer_config.relative_step is not None else True,
-                warmup_init=optimizer_config.warmup_init if optimizer_config.warmup_init is not None else False,
                 k=optimizer_config.k if optimizer_config.k is not None else 5,
                 xi=optimizer_config.xi if optimizer_config.xi is not None else 1e-20,
                 alpha=optimizer_config.alpha if optimizer_config.alpha is not None else 5,
                 stochastic_rounding=optimizer_config.stochastic_rounding if optimizer_config.stochastic_rounding is not None else False,
-                min_step=optimizer_config.min_step if optimizer_config.min_step is not None else None,
-                # relative_step_scaling=optimizer_config.relative_step_scaling if optimizer_config.relative_step_scaling is not None else False,
-                # scaling_window=optimizer_config.scaling_window if optimizer_config.scaling_window is not None else 5,
-                # scaling_multiplier=optimizer_config.scaling_multiplier if optimizer_config.scaling_multiplier is not None else 1.0,
-                # scaling_adjustment=optimizer_config.scaling_adjustment if optimizer_config.scaling_adjustment is not None else 0.01,
+            )
+
+        # TIGERFusion Optimizer
+        case Optimizer.TIGERFUSION:
+            from modules.util.optimizer.TIGERFUSION import TigerFusion
+
+            optimizer = TigerFusion(
+                params=parameters,
+                lr=config.learning_rate,
+                eps=(optimizer_config.eps if optimizer_config.eps is not None else 1e-30,
+                     optimizer_config.eps2 if optimizer_config.eps2 is not None else 1e-3),
+                clip_threshold=optimizer_config.clip_threshold if optimizer_config.clip_threshold is not None else 1.0,
+                decay_rate=optimizer_config.decay_rate if optimizer_config.decay_rate is not None else -0.8,
+                betas=(optimizer_config.beta1 if optimizer_config.beta1 is not None else 0.9,
+                       optimizer_config.beta2 if optimizer_config.beta2 is not None else 0.999,
+                       optimizer_config.beta3 if optimizer_config.beta3 is not None else 0.9999),
+                weight_decay=optimizer_config.weight_decay if optimizer_config.weight_decay is not None else 0.0,
+                k=optimizer_config.k if optimizer_config.k is not None else 5,
+                xi=optimizer_config.xi if optimizer_config.xi is not None else 1e-20,
+                alpha=optimizer_config.alpha if optimizer_config.alpha is not None else 5,
             )
 
         # CAME Optimizer

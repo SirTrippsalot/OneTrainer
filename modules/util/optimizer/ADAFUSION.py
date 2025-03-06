@@ -6,32 +6,23 @@ from pytorch_optimizer.base.exception import NoSparseGradientError
 class Adafusion(torch.optim.Optimizer):
     """Implements Adafusion: a comprehensive hybrid adaptive optimizer.
 
-    Adafusion is a sophisticated optimizer combining multiple advanced optimization techniques, 
-    including Yogi-style variance control, Aida-style step suppression, stochastic rounding, 
-    confidence-guided strategies, Selective Projection Decay (SPD), dynamic adaptation inspired by
-    AdaEMAMix, and the convergence properties inspired by ADOPT, with optional Lookahead and
-    AutoClipper features and an optional OrthoGrad-like gradient orthogonalization step.
-
-    Key features include:
-      - Yogi-style variance adjustment.
+    Adafusion combines multiple advanced optimization techniques:
+      - Yogi-style variance adjustment (with a hybrid update that fuses ADOPT/Adan ideas).
       - Aida-style step suppression.
-      - Stochastic rounding (useful for BF16/low-precision formats).
-      - Confidence-guided strategy.
+      - Trust ratio scaling (à la LAMB) to adapt the effective learning rate based on parameter norms.
+      - Stochastic rounding (for BF16/low-precision formats).
+      - Confidence-guided weight decay.
       - Selective Projection Decay (SPD).
-      - AdaEMAMix-inspired adaptation.
-      - ADOPT-inspired variance reduction.
-      - Lookahead integration (with a factored version using slow row/column averages).
+      - AdaEMAMix-inspired slow-moving averages.
+      - Lookahead integration.
       - AutoClipper integration.
       - OrthoGrad-like gradient orthogonalization.
 
-    Note: In this version, we operate in the input parameter’s dtype (e.g. BF16 or FP16)
-    instead of forcing FP32 throughout. This reduces VRAM overhead but may come at the cost 
-    of numerical precision.
-    
+    Note: In this version, no relative-step is used. The effective update is self-adjusting via the trust ratio.
+
     Arguments:
         params (iterable): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float, optional): External learning rate. Typically left as `None` if using relative 
-                              or unified relative step approach.
+        lr (float, optional): External learning rate. Defaults to 1.0 if not provided.
         eps (Tuple[float, float], optional): Regularization constants (default: (1e-30, 1e-3)).
         clip_threshold (float, optional): Threshold to clip the RMS of the final gradient update (default: 1.0).
         clip_updates (bool, optional): Whether to apply update clipping (default: True).
@@ -39,12 +30,8 @@ class Adafusion(torch.optim.Optimizer):
         betas (Tuple[float, float, float], optional): Coefficients for gradient, squared gradient, 
                                                       and slow EMA (default: (0.9, 0.999, 0.9999)).
         weight_decay (float, optional): Weight decay factor (default: 0).
-        scale_parameter (bool, optional): If True, scales the learning rate by parameter RMS (default: True).
-        relative_step (bool, optional): Enables dynamic relative step (default: True).
-        warmup_init (bool, optional): If True, uses warm-up initialization (default: False).
         stochastic_rounding (bool, optional): If True, uses stochastic rounding for BF16 (default: False).
-        alpha (float, optional): Scaling factor for combining update components (default: 5).
-        min_step (float, optional): Minimum step size for relative step (default: None).
+        alpha (float, optional): Scaling factor for combining fast and slow averages (default: 5).
         k (int, optional): Number of projections in Aida-style step suppression (default: 2).
         xi (float, optional): Term to avoid division by zero in projections (default: 1e-20).
         lookahead_k (int, optional): Steps between Lookahead updates (default: 5).
@@ -53,6 +40,7 @@ class Adafusion(torch.optim.Optimizer):
         clip_percentile (float, optional): Percentile for AutoClipper (default: 10).
         history_size (int, optional): History size for AutoClipper (default: 10000).
         ortho_grad (bool, optional): If True, applies gradient orthogonalization (default: True).
+        adan_coef (float, optional): Scaling factor for the gradient difference term (default: 0.5).
     """
     def __init__(
         self,
@@ -64,12 +52,8 @@ class Adafusion(torch.optim.Optimizer):
         decay_rate=-0.8,
         betas=(0.9, 0.999, 0.9999),
         weight_decay=0.0,
-        scale_parameter=True,
-        relative_step=True,
-        warmup_init=False,
         stochastic_rounding=False,
         alpha=5,
-        min_step=None,
         k=2,
         xi=1e-20,
         lookahead_k=5,
@@ -77,13 +61,9 @@ class Adafusion(torch.optim.Optimizer):
         autoclipper=True,
         clip_percentile=10,
         history_size=10000,
-        ortho_grad=True
+        ortho_grad=True,
+        adan_coef=0.5
     ):
-        if lr is not None and relative_step:
-            raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
-        if warmup_init and not relative_step:
-            raise ValueError("`warmup_init=True` requires `relative_step=True`")
-        
         defaults = {
             "lr": lr,
             "eps": eps,
@@ -92,18 +72,15 @@ class Adafusion(torch.optim.Optimizer):
             "decay_rate": decay_rate,
             "betas": betas,
             "weight_decay": weight_decay,
-            "scale_parameter": scale_parameter,
-            "relative_step": relative_step,
-            "warmup_init": warmup_init,
             "alpha": alpha,
-            "min_step": min_step,
             "k": k,
             "xi": xi,
             "lookahead_k": lookahead_k,
             "lookahead_alpha": lookahead_alpha,
             "autoclipper": autoclipper,
             "clip_percentile": clip_percentile,
-            "history_size": history_size
+            "history_size": history_size,
+            "adan_coef": adan_coef
         }
         self.stochastic_rounding = stochastic_rounding
         self.autoclipper_enabled = autoclipper
@@ -114,21 +91,30 @@ class Adafusion(torch.optim.Optimizer):
             self.history_index = 0
             self.history_size = history_size
             self.clip_percentile = clip_percentile
+            
+        # Collect unique dtype values
+        self.unique_dtypes = set()
+
+        for param in params:
+            if isinstance(param, dict):
+                param_list = param["params"]
+            else:
+                param_list = [param]
+
+            for p in param_list:
+                if p is not None:
+                    self.unique_dtypes.add(p.dtype)
+
+        # Print unique dtypes
+        if self.unique_dtypes:
+            print(f"Adafusion initialized with unique dtypes: {self.unique_dtypes}")
 
         super().__init__(params, defaults)
 
     @staticmethod
     def _get_lr(param_group, param_state):
-        lr = param_group["lr"] if param_group["lr"] is not None else 1.0
-        rel_step_sz = lr
-        if param_group["relative_step"]:
-            min_step = param_group["min_step"] if param_group["min_step"] is not None else (
-                1e-6 * param_state.get("step", 1) if param_group["warmup_init"] else 1e-2)
-            rel_step_sz = min(min_step, 1.0 / math.sqrt(param_state.get("step", 1)))
-        param_scale = 1.0
-        if param_group["scale_parameter"]:
-            param_scale = max(param_group["eps"][1], param_state.get("RMS", 1.0))
-        return param_scale * rel_step_sz
+        # Simply use the provided lr (defaulting to 1.0 if none is given)
+        return param_group["lr"] if param_group["lr"] is not None else 1.0
 
     @staticmethod
     def _get_options(param_group, param_shape):
@@ -197,8 +183,6 @@ class Adafusion(torch.optim.Optimizer):
             return
 
         grad = p.grad
-
-        # --- Raise a specific exception for sparse gradients ---
         if grad.is_sparse:
             raise NoSparseGradientError(f"Adafusion does not support sparse gradients: {p}")
 
@@ -206,7 +190,7 @@ class Adafusion(torch.optim.Optimizer):
         grad_shape = grad.shape
         factored = self._get_options(group, grad_shape)
 
-        # --- Initialize state tensors in the same dtype as input ---
+        # --- Initialize state ---
         if len(state) == 0:
             state["step"] = 0
             state["exp_avg"] = torch.zeros_like(grad, device=grad.device)
@@ -223,8 +207,9 @@ class Adafusion(torch.optim.Optimizer):
                 state["exp_avg_slow"] = torch.zeros_like(grad, device=grad.device)
                 state["exp_avg_res"] = torch.zeros_like(grad, device=grad.device)
             state["pre"] = p.detach().clone()
+            # Will store the previous gradient for ADAN-style updates.
+            state["prev_grad"] = None
 
-        # Use parameters and gradients in their native dtype.
         p_data = p.detach()
         grad_data = grad.detach()
 
@@ -235,8 +220,14 @@ class Adafusion(torch.optim.Optimizer):
         beta1, beta2, beta3 = group["betas"]
         beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
 
-        # --- Yogi-Style Variance Adjustment ---
-        squared_grad_update = (grad_data ** 2) + group["eps"][0]
+        # --- Hybrid Variance Adjustment ---
+        # Use a hybrid squared gradient: average of the plain squared grad and
+        # the squared difference (if a previous grad exists)
+        if state["prev_grad"] is not None:
+            squared_grad_update = 0.5 * (grad_data ** 2) + 0.5 * ((grad_data - state["prev_grad"]) ** 2) + group["eps"][0]
+        else:
+            squared_grad_update = (grad_data ** 2) + group["eps"][0]
+
         bias_correction1 = 1 - beta1 ** state["step"]
         bias_correction2 = 1 - beta2 ** state["step"]
 
@@ -301,6 +292,17 @@ class Adafusion(torch.optim.Optimizer):
             clipping_factor = (update_rms / group["clip_threshold"]).clamp(min=1.0)
             update_direction = update_direction / clipping_factor
 
+        # --- ADAN-Style Gradient Difference Addition ---
+        if state["prev_grad"] is not None:
+            grad_diff = grad_data - state["prev_grad"]
+            update_direction.add_(grad_diff, alpha=group["adan_coef"])
+
+        # --- Trust Ratio Scaling ---
+        param_norm = p_data.norm(2)
+        update_norm = update_direction.norm(2)
+        trust_ratio = param_norm / (update_norm + 1e-9) if update_norm > 0 else 1.0
+        update_direction.mul_(trust_ratio)
+
         update_direction.mul_(lr)
 
         # --- Update the first moment estimate ---
@@ -345,10 +347,13 @@ class Adafusion(torch.optim.Optimizer):
                 state["exp_avg"].mul_(lookahead_alpha).add_(state["exp_avg_slow"], alpha=(1 - lookahead_alpha))
                 state["exp_avg_slow"].copy_(state["exp_avg"])
 
+        # --- Update previous gradient for the next iteration ---
+        state["prev_grad"] = grad_data.clone()
+
     def _ratio(self, new_p, param, pre):
         curr_norm = torch.norm(new_p - pre)
         prev_norm = torch.norm(param - pre)
-        ratio = (curr_norm - prev_norm) / curr_norm
+        ratio = (curr_norm - prev_norm) / (curr_norm + 1e-9)
         return torch.nn.functional.hardtanh(ratio, 0.0, 1.0)
 
     @torch.no_grad()
@@ -361,12 +366,9 @@ class Adafusion(torch.optim.Optimizer):
         for group in self.param_groups:
             if self.ortho_grad:
                 self._orthogonalize_gradients(group['params'])
-
             # --- Apply AutoClipper once per parameter group ---
             if self.autoclipper_enabled:
                 self._apply_autoclipper(group)
-
             for i, p in enumerate(group["params"]):
                 self.step_parameter(p, group, i)
-
         return loss

@@ -350,14 +350,41 @@ class BaseStableDiffusionSetup(
                         'target': latent_noise,
                     }
                 elif model.noise_scheduler.config.prediction_type == 'v_prediction':
+                # Process unconditional prompt once
+                    single_unconditional_output = model.encode_text(
+                        train_device=self.train_device,
+                        batch_size=1,
+                        rand=rand,
+                        text="",
+                        text_encoder_layer_skip=config.text_encoder_layer_skip,
+                        text_encoder_dropout_probability=0.0,  # Ensure consistency
+                    )  # Shape: [1, seq_len, hidden_dim]
+
+                    # Expand to match batch size
+                    batch_size = batch['latent_image'].shape[0]
+                    unconditional_output = single_unconditional_output.expand(batch_size, -1, -1)
+
+                    # UNet forward pass
+                    unconditional_predicted_noise = model.unet(
+                        latent_input.to(dtype=model.train_dtype.torch_dtype()),
+                        timestep,
+                        unconditional_output.to(dtype=model.train_dtype.torch_dtype()),
+                    ).sample
+
+                    # Debiasing tweak
+                    debias_factor = 0.1
+                    debiased_predicted_noise = (
+                        predicted_latent_noise * (1.0 - debias_factor) + 
+                        unconditional_predicted_noise * debias_factor
+                    )
+
                     target_velocity = model.noise_scheduler.get_velocity(scaled_latent_image, latent_noise, timestep)
                     model_output_data = {
                         'loss_type': 'target',
                         'timestep': timestep,
-                        'predicted': predicted_latent_noise,
+                        'predicted': debiased_predicted_noise,
                         'target': target_velocity,
                     }
-
             if self.debug_mode:
                 with torch.no_grad():
                     self._save_text(

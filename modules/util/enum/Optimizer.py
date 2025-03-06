@@ -56,6 +56,7 @@ class Optimizer(Enum):
     # ADAFACTOR
     ADAFACTOR = 'ADAFACTOR'
     ADAFUSION = 'ADAFUSION'
+    TIGERFUSION = 'TIGERFUSION'
 
     # CAME
     CAME = 'CAME'
@@ -91,6 +92,7 @@ class Optimizer(Enum):
             Optimizer.ADAM,
             Optimizer.ADAMW,
             Optimizer.ADAFUSION,
+            Optimizer.TIGERFUSION,
         ]
 
     # Small helper for adjusting learning rates to adaptive optimizers.

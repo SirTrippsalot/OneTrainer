@@ -135,45 +135,54 @@ class ModelSetupDiffusionLossMixin(metaclass=ABCMeta):
         return losses
 
     def __unmasked_losses(
-            self,
-            batch: dict,
-            data: dict,
-            config: TrainConfig,
-    ):
+        self,
+        batch: dict,
+        data: dict,
+        config: TrainConfig,
+    ) -> Tensor:
         losses = 0
+        mean_dim = list(range(1, data['predicted'].ndim))
 
         def pseudo_huber_loss(pred, target, delta=1.0):
             error = pred - target
-            return (delta**2 * (torch.sqrt(1 + (error / delta)**2) - 1)).mean([1, 2, 3])
+            return (delta**2 * (torch.sqrt(1 + (error / delta)**2) - 1)).mean(mean_dim)
 
-        mean_dim = list(range(1, data['predicted'].ndim))
+        # Ensure timestep is a tensor
+        if isinstance(data['timestep'], torch.Tensor):
+            timestep_tensor = data['timestep'].clone().detach().to(device=data['predicted'].device, dtype=torch.long)
+        else:
+            timestep_tensor = torch.tensor(data['timestep'], device=data['predicted'].device, dtype=torch.long)
 
-        # MSE/L2 Loss
+        # Compute SNR for dynamic weighting
+        snr = self.__snr(timestep_tensor, data['predicted'].device)
+
+        # MSE/L2 Loss with dynamic weighting
         if config.mse_strength != 0:
+            # Dynamic weight: increase for high SNR (early timesteps), decrease for low SNR
+            # snr_weight = torch.clamp(torch.sqrt(snr + 1e-8) / (snr.mean() + 1e-8), 0.1, 2.0)
+            # Apply to loss
             losses += pseudo_huber_loss(
                 data['predicted'].to(dtype=torch.float32),
                 data['target'].to(dtype=torch.float32),
-                delta=1.0  # You can experiment with values like 0.5, 1.0, or 2.0
-                reduction='none'
-            ).mean(mean_dim) * config.mse_strength
+                delta=1.0
+            ) * config.mse_strength
 
-
-        # MAE/L1 Loss
+        # MAE/L1 Loss (optional dynamic weighting)
         if config.mae_strength != 0:
             losses += F.l1_loss(
                 data['predicted'].to(dtype=torch.float32),
                 data['target'].to(dtype=torch.float32),
                 reduction='none'
-            ).mean(mean_dim) * config.mae_strength
+            ).mean(mean_dim) * config.mae_strength  # Could add snr_weight here too
 
-        # log-cosh Loss
+        # Log-cosh Loss (optional dynamic weighting)
         if config.log_cosh_strength != 0:
             losses += self.__log_cosh_loss(
-                    data['predicted'].to(dtype=torch.float32),
-                    data['target'].to(dtype=torch.float32)
-                ).mean(mean_dim) * config.log_cosh_strength
+                data['predicted'].to(dtype=torch.float32),
+                data['target'].to(dtype=torch.float32)
+            ).mean(mean_dim) * config.log_cosh_strength  # Could add snr_weight here too
 
-        # VB loss
+        # VB Loss (if applicable)
         if config.vb_loss_strength != 0 and 'predicted_var_values' in data:
             losses += vb_losses(
                 coefficients=self.__coefficients,
@@ -253,69 +262,87 @@ class ModelSetupDiffusionLossMixin(metaclass=ABCMeta):
         device: torch.device,
     ) -> Tensor:
         return self.__sigmas[timesteps].to(device=device)
+        
+    def __jsd_weight(self, pred_noise: Tensor, true_noise: Tensor, eps=1e-6) -> Tensor:
+        """
+        Compute Jensen-Shannon Divergence (JSD) between predicted noise and true noise.
+        Returns a dynamic loss weight based on divergence.
+        """
+        pred_noise = pred_noise.clamp(min=eps)  # Ensure no zero values
+        true_noise = true_noise.clamp(min=eps)
+
+        mean_noise = 0.5 * (pred_noise + true_noise)
+
+        mean_noise = mean_noise.clamp(min=eps)  # Prevent zero values
+
+        kl1 = F.kl_div(pred_noise.log(), mean_noise, reduction='batchmean', log_target=True)
+        kl2 = F.kl_div(true_noise.log(), mean_noise, reduction='batchmean', log_target=True)
+        
+        jsd = (kl1 + kl2) / 2.0
+        
+        return (1.0 + jsd).clamp(1.0, 2.0)  # Keep weight within reasonable range
+
+
 
     def _diffusion_losses(
-            self,
-            batch: dict,
-            data: dict,
-            config: TrainConfig,
-            train_device: torch.device,
-            betas: Tensor | None = None,
-            alphas_cumprod_fun: Callable[[Tensor, int], Tensor] | None = None,
+        self,
+        batch: dict,
+        data: dict,
+        config: TrainConfig,
+        train_device: torch.device,
+        betas: Tensor | None = None,
+        alphas_cumprod_fun: Callable[[Tensor, int], Tensor] | None = None,
     ) -> Tensor:
+        # Scaling factors for batch size and gradient accumulation
         loss_weight = batch['loss_weight']
-        batch_size_scale = \
-            1 if config.loss_scaler in [LossScaler.NONE, LossScaler.GRADIENT_ACCUMULATION] \
-                else config.batch_size
-        gradient_accumulation_steps_scale = \
-            1 if config.loss_scaler in [LossScaler.NONE, LossScaler.BATCH] \
-                else config.gradient_accumulation_steps
+        batch_size_scale = 1 if config.loss_scaler in [LossScaler.NONE, LossScaler.GRADIENT_ACCUMULATION] else config.batch_size
+        gradient_accumulation_steps_scale = 1 if config.loss_scaler in [LossScaler.NONE, LossScaler.BATCH] else config.gradient_accumulation_steps
 
+        # Initialize coefficients if needed
         if self.__coefficients is None and betas is not None:
             self.__coefficients = DiffusionScheduleCoefficients.from_betas(betas)
-
         self.__alphas_cumprod_fun = alphas_cumprod_fun
 
+        # Compute base losses
         if data['loss_type'] == 'align_prop':
             losses = self.__align_prop_losses(batch, data, config, train_device)
         else:
-            # TODO: don't disable masked loss functions when has_conditioning_image_input is true.
-            #  This breaks if only the VAE is trained, but was loaded from an inpainting checkpoint
             if config.masked_training and not config.model_type.has_conditioning_image_input():
                 losses = self.__masked_losses(batch, data, config)
             else:
                 losses = self.__unmasked_losses(batch, data, config)
 
-        # Scale Losses by Batch and/or GA (if enabled)
+        # Apply scaling
         losses = losses * batch_size_scale * gradient_accumulation_steps_scale
-
         losses *= loss_weight.to(device=losses.device, dtype=losses.dtype)
 
-        # Apply timestep based loss weighting.
+        # Dynamic Weighting for V-Prediction
         if 'timestep' in data and data['loss_type'] != 'align_prop':
             v_pred = data.get('prediction_type', '') == 'v_prediction'
+            timesteps = data['timestep'].to(device=train_device)
+            snr = self.__snr(timesteps, train_device)
+
             match config.loss_weight_fn:
                 case LossWeight.MIN_SNR_GAMMA:
-                    # losses *= self.__min_snr_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
                     # Compute individual weights
-                    min_snr_weight = self.__min_snr_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
-                    debiased_weight = self.__debiased_estimation_weight(data['timestep'], v_pred, losses.device)
-                    p2_weight = self.__p2_loss_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+                    min_snr_weight = self.__min_snr_weight(timesteps, config.loss_weight_strength, v_pred, train_device)
+                    p2_weight = self.__p2_loss_weight(timesteps, config.loss_weight_strength, v_pred, train_device)
 
-                    # Combine weights (adjust ratios as needed)
-                    alpha = 0.35  # e.g., 0.4 for Min SNR Gamma
-                    beta = 0.2  # e.g., 0.4 for Debiased
-                    gamma = 1 - (alpha + beta)           # Remaining weight for P2 (e.g., 0.2)
+                    # 50/50 Hybrid Weighting
+                    hybrid_weight = 0.6 * min_snr_weight + 0.4 * p2_weight
 
-                    # Ensure alpha + beta + gamma = 1
-                    eps = 1e-8  # to avoid log(0) issues
-                    hybrid_weight = alpha * min_snr_weight + beta * debiased_weight + gamma * p2_weight
+                    # Compute JSD-based adjustment weight
+                    jsd_weight = self.__jsd_weight(data['predicted'], data['target'])
 
-                    losses *= hybrid_weight
+                    # Apply JSD to hybrid weight
+
+                    losses *= hybrid_weight * jsd_weight
+    
                 case LossWeight.DEBIASED_ESTIMATION:
-                    losses *= self.__debiased_estimation_weight(data['timestep'], v_pred, losses.device)
+                    losses *= self.__debiased_estimation_weight(timesteps, v_pred, train_device)
                 case LossWeight.P2:
-                    losses *= self.__p2_loss_weight(data['timestep'], config.loss_weight_strength, v_pred, losses.device)
+                    losses *= self.__p2_loss_weight(timesteps, config.loss_weight_strength, v_pred, train_device)
+                # Other cases remain unchanged
 
         return losses
 
