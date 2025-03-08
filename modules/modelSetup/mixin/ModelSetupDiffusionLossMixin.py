@@ -329,14 +329,14 @@ class ModelSetupDiffusionLossMixin(metaclass=ABCMeta):
                     p2_weight = self.__p2_loss_weight(timesteps, config.loss_weight_strength, v_pred, train_device)
 
                     # 50/50 Hybrid Weighting
-                    hybrid_weight = 0.6 * min_snr_weight + 0.4 * p2_weight
+                    losses *= (0.6 * min_snr_weight + 0.4 * p2_weight)
 
                     # Compute JSD-based adjustment weight
-                    jsd_weight = self.__jsd_weight(data['predicted'], data['target'])
+                    #jsd_weight = self.__jsd_weight(data['predicted'], data['target'])
 
                     # Apply JSD to hybrid weight
 
-                    losses *= hybrid_weight * jsd_weight
+                    #losses *= hybrid_weight * jsd_weight
     
                 case LossWeight.DEBIASED_ESTIMATION:
                     losses *= self.__debiased_estimation_weight(timesteps, v_pred, train_device)
